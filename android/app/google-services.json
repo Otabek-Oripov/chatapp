@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "227234727215",
+    "project_id": "chatapp-37661",
+    "storage_bucket": "chatapp-37661.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:227234727215:android:7295c6dd50d20c43c7cdda",
+        "android_client_info": {
+          "package_name": "otabek_oripovcom.example.chatapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCv2BCqSC8Z30Bh02utTOmL46PQ87fYIOs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
