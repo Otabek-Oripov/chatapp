@@ -13,7 +13,6 @@ ZegoSendCallInvitationButton actionButton(
     iconSize: const Size(30, 30),
     buttonSize: const Size(40, 40),
 
-    // 🔹 To‘g‘ri: ZegoUIKitUser ishlatiladi, ZegoUiKit emas
     invitees: [
       ZegoUIKitUser(
         id: receiverId,
