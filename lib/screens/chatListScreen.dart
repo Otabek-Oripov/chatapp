@@ -135,6 +135,8 @@ class _ChatlistscreenState extends ConsumerState<Chatlistscreen> {
 
                     if (currentUserId == null) return const SizedBox();
 
+                    final unreadCount = chat.unreadCount[currentUserId] ?? 0;
+
                     return ListTile(
                       leading: Stack(
                         children: [
@@ -144,10 +146,10 @@ class _ChatlistscreenState extends ConsumerState<Chatlistscreen> {
                                 : null,
                             child: otherUser.photoUrl == null
                                 ? Text(
-                                    otherUser.name.isNotEmpty
-                                        ? otherUser.name[0].toUpperCase()
-                                        : 'U',
-                                  )
+                              otherUser.name.isNotEmpty
+                                  ? otherUser.name[0].toUpperCase()
+                                  : 'U',
+                            )
                                 : null,
                           ),
                           Positioned(
@@ -179,21 +181,53 @@ class _ChatlistscreenState extends ConsumerState<Chatlistscreen> {
                           ),
                         ],
                       ),
-                      title: Text(otherUser.name),
-                      subtitle: const Text(
-                        "You can now start to chat",
+                      title: Text(
+                        otherUser.name,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      subtitle: Text(
+                        chat.lastMessage.isNotEmpty
+                            ? chat.lastMessage
+                            : "You can now start to chat",
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ChatScreen(
-                            chatId: chat.chatId,
-                            othersUser: otherUser,
+
+                      //  O‘qilmagan xabarlar soni
+                      trailing: unreadCount > 0
+                          ? Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          unreadCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
+                      )
+                          : const SizedBox.shrink(),
+
+                        onTap: () {
+                          ref.read(chatServiceProvider).markMessageAsRead(chat.chatId);
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatScreen(
+                                chatId: chat.chatId,
+                                othersUser: otherUser,
+                              ),
+                            ),
+                          ).then((_) {
+                            ref.invalidate(chatsProvider); //
+                          });
+                        }
+
                     );
                   },
                 );
@@ -228,7 +262,7 @@ class _ChatlistscreenState extends ConsumerState<Chatlistscreen> {
     if (currentUserId == null) return null;
 
     final otherUserId = participants.firstWhere(
-      (id) => id != currentUserId,
+          (id) => id != currentUserId,
       orElse: () => '',
     );
 

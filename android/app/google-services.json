@@ -12,7 +12,20 @@
           "package_name": "otabek_oripovcom.example.chatapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "227234727215-mu7hqain62k3cts9ps2h6l3i77ldqh9o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "otabek_oripovcom.example.chatapp",
+            "certificate_hash": "c701ea84820e7e0e471f6c03d584d99a102da0fc"
+          }
+        },
+        {
+          "client_id": "227234727215-jpjq657a716ltqcina7lc12gdn0qdn2b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCv2BCqSC8Z30Bh02utTOmL46PQ87fYIOs"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "227234727215-jpjq657a716ltqcina7lc12gdn0qdn2b.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "227234727215-sbnvmjj6t6oepvcfvpmtacjjg82193gq.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "otabekoripovcom.example.chatapp"
+              }
+            }
+          ]
         }
       }
     }

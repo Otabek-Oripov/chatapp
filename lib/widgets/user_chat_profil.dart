@@ -1,32 +1,46 @@
 import 'package:chatapp/models/Usermodel.dart';
+import 'package:chatapp/providers/provide.dart';
 import 'package:chatapp/providers/user_status_provider.dart';
+import 'package:chatapp/screens/Profileinfo.dart';
+import 'package:chatapp/widgets/dot_indicator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class UserChatProfil extends ConsumerWidget {
+class UserChatProfile extends ConsumerWidget {
   final UserModel user;
+  final String chatId; // <-- bu joy qo‘shildi
 
-  const UserChatProfil({super.key, required this.user});
+  const UserChatProfile({
+    super.key,
+    required this.user,
+    required this.chatId, // <-- bu ham qo‘shildi
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final statusAsync = ref.watch(userStatusProvider(user.uid));
+    final typingStatus = ref.watch(typingProvider(chatId)); // <-- to‘g‘rilandi
+    final isOtherUserTyping = typingStatus[user.uid] ?? false;
 
     return statusAsync.when(
       data: (isOnline) => Row(
         children: [
           Stack(
             children: [
-              CircleAvatar(
-                backgroundImage:
-                user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
-                child: user.photoUrl == null
-                    ? Text(
-                  user.name.isNotEmpty
-                      ? user.name[0].toUpperCase()
-                      : 'U',
-                )
-                    : null,
+              InkWell(
+                onTap: (){
+                  Navigator.push(context, MaterialPageRoute(builder: (context)=>ProfileInfo(info: user,)));
+                },
+                child: CircleAvatar(
+                  backgroundImage: user.photoUrl != null
+                      ? NetworkImage(user.photoUrl!)
+                      : null,
+                  child: user.photoUrl == null
+                      ? Text(
+                          user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                        )
+                      : null,
+                ),
               ),
               Positioned(
                 bottom: 0,
@@ -38,25 +52,30 @@ class UserChatProfil extends ConsumerWidget {
               ),
             ],
           ),
-        SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                user.name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                isOnline ? "Online" : "Offline",
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isOnline ? Colors.green : Colors.grey,
-                ),
-              ),
-            ],
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(user.name, style: const TextStyle(fontSize: 16)),
+                if (isOtherUserTyping)
+                  const Row(
+                    children: [
+                      Text(
+                        "Typing...",
+                        style: TextStyle(color: Colors.blue, fontSize: 10),
+                      ),
+                      SizedBox(width: 4),
+                      ThreeDots(),
+                    ],
+                  )
+                else if (isOnline)
+                  Text(
+                    "Online",
+                    style: TextStyle(fontSize: 12, color: Colors.green),
+                  ),
+              ],
+            ),
           ),
         ],
       ),

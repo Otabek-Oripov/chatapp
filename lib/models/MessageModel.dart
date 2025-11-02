@@ -3,66 +3,56 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class MessageModel {
   final String messageId;
   final String senderId;
-  final String senderName;
   final String message;
-  final DateTime? timestamp;
-  final String type;
-  final Map<String, DateTime> readBy;
+  final String type; // text, image, call, system
+  final DateTime timestamp;
   final String? imageUrl;
-  final String? callType;
-  final String? callStatus;
+  final String? readBy;
+  final String? callType; // "audio" yoki "video"
+  final String? callStatus; // "missed", "answered", "rejected"
+  final String? chatId; // chat ID uchun qo‘shimcha (agar kerak bo‘lsa)
 
   MessageModel({
     required this.messageId,
     required this.senderId,
-    required this.senderName,
     required this.message,
     required this.type,
-    required this.readBy,
-    this.timestamp,
+    required this.timestamp,
     this.imageUrl,
+    this.readBy,
     this.callType,
     this.callStatus,
-
+     this.chatId,
   });
 
-  factory MessageModel.fromMap(Map<String, dynamic> map) {
+  factory MessageModel.fromMap(Map<String, dynamic> data, String messageId) {
     return MessageModel(
-      messageId: map['messageId'] ?? '',
-      senderId: map['senderId'] ?? '',
-      senderName: map['senderName'] ?? '',
-      message: map['message'] ?? '',
-      type: map['type'] ?? 'text',
-      timestamp: (map['timestamp'] as Timestamp?)?.toDate(),
-      readBy: map['readBy'] != null
-          ? Map<String, DateTime>.fromEntries(
-        (map['readBy'] as Map).entries.map(
-              (e) => MapEntry(e.key, (e.value as Timestamp).toDate()),
-        ),
-      )
-          : {},
-      imageUrl: map['imageUrl'],
-      callType: map['callType'],
-      callStatus: map['callStatus'],
-
+      messageId: messageId,
+      senderId: data['senderId'] ?? '',
+      message: data['message'] ?? '',
+      type: data['type'] ?? 'text',
+      timestamp: data['timestamp'] is Timestamp
+          ? (data['timestamp'] as Timestamp).toDate()
+          : Timestamp.now().toDate(),
+      imageUrl: data['imageUrl'],
+      readBy: data['readBy'],
+      callType: data['callType'],       // 🔹 qo‘shildi
+      callStatus: data['callStatus'],   // 🔹 qo‘shildi
+      chatId: data['chatId'],           // 🔹 ixtiyoriy
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'messageId': messageId,
       'senderId': senderId,
-      'senderName': senderName,
       'message': message,
-      'timestamp': timestamp != null ? Timestamp.fromDate(timestamp!) : null,
       'type': type,
-      'readBy': readBy.map(
-            (key, value) => MapEntry(key, Timestamp.fromDate(value)),
-      ),
+      'timestamp': Timestamp.fromDate(timestamp),
       'imageUrl': imageUrl,
-      if(callType != null) 'callType':callType,
-      if(callStatus != null) 'callStatus':callStatus,
-
+      'readBy': readBy,
+      'callType': callType,      // 🔹 qo‘shildi
+      'callStatus': callStatus,  // 🔹 qo‘shildi
+      'chatId': chatId,          // 🔹 ixtiyoriy
     };
   }
 }

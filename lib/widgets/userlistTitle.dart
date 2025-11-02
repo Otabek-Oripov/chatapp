@@ -121,32 +121,34 @@ class Userlisttitle extends ConsumerWidget {
           child: buttonName(Icons.done, 'Accepted'),
         );
       }
-    }
-    return MaterialButton(
-      color: Colors.blueAccent,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      onPressed: () async {
-        final result = await notifier.sendRequest();
-        if (result == 'success' && context.mounted) {
-          showAppSnackbar(
-            context: context,
-            type: SnackbarType.success,
-            description: 'Request send successfully!',
-          );
-        } else {
-          if (context.mounted) {
+    }else{
+      return MaterialButton(
+        color: Colors.blueAccent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        onPressed: () async {
+          final result = await notifier.sendRequest();
+          if (result == 'success' && context.mounted) {
             showAppSnackbar(
               context: context,
-              type: SnackbarType.error,
-              description: 'Failed: $result',
+              type: SnackbarType.success,
+              description: 'Request send successfully!',
             );
+          } else {
+            if (context.mounted) {
+              showAppSnackbar(
+                context: context,
+                type: SnackbarType.error,
+                description: 'Failed: $result',
+              );
+            }
           }
-        }
-      },
-      child: buttonName(Icons.person, 'Add friend'),
-    );
-  }
+        },
+        child: buttonName(Icons.person, 'Add friend'),
+      );
+    }
+    }
+
 
   SizedBox buttonName(IconData icon, String name) {
     return SizedBox(
