@@ -16,6 +16,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:just_audio/just_audio.dart' hide PlayerState;
 
+import '../../widgets/callHistory.dart';
+
 class ChatScreen extends ConsumerStatefulWidget {
   final String chatId;
   final UserModel othersUser;
@@ -336,6 +338,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   itemBuilder: (context, index) {
                     final message = messages[index];
                     final isMe = message.senderId == currentUserId;
+                    final isMissed = message.callStatus == 'missed';
+                    final isVideo = message.callType == 'video';
+                    final isSystem = message.type == 'system';
 
                     if (message.type == 'audio') {
                       final bubbleColor = isMe ? outgoingColor : incomingColor;
@@ -358,6 +363,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                         isMe: isMe,
                         message: message,
                         widget: widget,
+                      );
+                    }
+                    if (message.type == 'call') {
+                      return Callhistory(
+                        isMe: isMe,
+                        widget: widget,
+                        isMissed: isMissed,
+                        isVideo: isVideo,
+                        message: message,
+                      );
+                    }
+                    if (isSystem){
+                      return Container(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          message.message,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: Colors.grey,
+                          ),
+                        ),
                       );
                     }
                     return MessageandimagesDisplay(
