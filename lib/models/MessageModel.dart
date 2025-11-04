@@ -7,6 +7,7 @@ class MessageModel {
   final String type; // text, image, call, system
   final DateTime timestamp;
   final String? imageUrl;
+  final String? audioUrl;
   final String? readBy;
   final String? callType; // "audio" yoki "video"
   final String? callStatus; // "missed", "answered", "rejected"
@@ -19,6 +20,7 @@ class MessageModel {
     required this.type,
     required this.timestamp,
     this.imageUrl,
+    this.audioUrl,
     this.readBy,
     this.callType,
     this.callStatus,
@@ -35,6 +37,7 @@ class MessageModel {
           ? (data['timestamp'] as Timestamp).toDate()
           : Timestamp.now().toDate(),
       imageUrl: data['imageUrl'],
+      audioUrl: data['audioUrl'],
       readBy: data['readBy'],
       callType: data['callType'],       // 🔹 qo‘shildi
       callStatus: data['callStatus'],   // 🔹 qo‘shildi
@@ -49,6 +52,7 @@ class MessageModel {
       'type': type,
       'timestamp': Timestamp.fromDate(timestamp),
       'imageUrl': imageUrl,
+      'audioUrl': audioUrl,
       'readBy': readBy,
       'callType': callType,      // 🔹 qo‘shildi
       'callStatus': callStatus,  // 🔹 qo‘shildi

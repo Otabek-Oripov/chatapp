@@ -502,4 +502,73 @@ class ChatService {
       print('Error uptading typing status: $e');
     }
   }
+
+  Future<String> uploadAudio(File audioFile, String chatId) async {
+    try {
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_$currentUserId.m4a';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('chat_audios')
+          .child(chatId)
+          .child(fileName);
+
+      final uploadTask = ref.putFile(audioFile);
+      final snapshot = await uploadTask.whenComplete(() {});
+      return await snapshot.ref.getDownloadURL();
+    } catch (e) {
+      print('Error uploading audio: $e');
+      return '';
+    }
+  }
+
+  Future<String> sendAudioMessage({
+    required String chatId,
+    required String audioUrl,
+  }) async {
+    try {
+      final currentUser = _firebaseAuth.currentUser!;
+      final messageId = _firestore.collection('messages').doc().id;
+
+      await _firestore.collection('messages').doc(messageId).set({
+        'messageId': messageId,
+        'senderId': currentUserId,
+        'senderName': currentUser.displayName ?? "User",
+        'message': '',
+        'audioUrl': audioUrl,
+        'timestamp': FieldValue.serverTimestamp(),
+        'chatId': chatId,
+        'type': 'audio',
+        'readBy': null,
+      });
+
+      await _firestore.collection('chats').doc(chatId).update({
+        'lastMessage': '🎙 Voice message',
+        'lastMessageTime': FieldValue.serverTimestamp(),
+        'lastSenderId': currentUserId,
+      });
+
+      return 'success';
+    } catch (e) {
+      print('Error sending audio: $e');
+      return e.toString();
+    }
+  }
+
+  Future<String> sendAudioUpload({
+    required String chatId,
+    required File audioFile,
+  }) async {
+    final audioUrl = await uploadAudio(audioFile, chatId);
+    if (audioUrl.isEmpty) {
+      return 'Failed to upload audio';
+    }
+    return await sendAudioMessage(
+      chatId: chatId,
+      audioUrl: audioUrl,
+    );
+  }
+
 }
+
+
