@@ -1,3 +1,4 @@
+// providers/profile_provider.dart
 import 'dart:async';
 import 'dart:io';
 import 'package:chatapp/models/profile_model.dart';
@@ -16,14 +17,13 @@ class ProfileNotifier extends StateNotifier<ProfileModel> {
   }
 
   void listenAuthChanges() {
-    _authSubscription =
-        FirebaseAuth.instance.authStateChanges().listen((user) async {
-          if (user != null) {
-            await loadUserData(user);
-          } else {
-            state = ProfileModel(isLoading: false);
-          }
-        });
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) async {
+      if (user != null) {
+        await loadUserData(user);
+      } else {
+        state = ProfileModel(isLoading: false);
+      }
+    });
   }
 
   Future<void> loadUserData([User? user]) async {
@@ -43,20 +43,14 @@ class ProfileNotifier extends StateNotifier<ProfileModel> {
 
       if (doc.exists) {
         final data = doc.data()!;
-        state = ProfileModel(
-          photoUrl: data['photoURL'],
-          name: data['name'],
-          email: data['email'],
-          createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-          userId: currentUser.uid,
-          isLoading: false,
-        );
+        state = ProfileModel.fromMap(data).copyWith(isLoading: false);
       } else {
         state = ProfileModel(
           userId: currentUser.uid,
           email: currentUser.email,
-          name: currentUser.displayName,
+          name: currentUser.displayName ?? "User",
           photoUrl: currentUser.photoURL,
+          profileImages: currentUser.photoURL != null ? [currentUser.photoURL!] : [],
           isLoading: false,
         );
       }
@@ -66,9 +60,85 @@ class ProfileNotifier extends StateNotifier<ProfileModel> {
     }
   }
 
+  // YANGI: Cheksiz rasm qo'shish
+  Future<bool> addProfileImage(File file) async {
+    try {
+      state = state.copyWith(isUploading: true);
+
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('profile_images/${FirebaseAuth.instance.currentUser!.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      final uploadTask = await ref.putFile(file);
+      final url = await uploadTask.ref.getDownloadURL();
+
+      // YANGI RASM BIRINCHI BO‘LADI → ASOSIY BO‘LADI
+      final updatedImages = [url, ...state.profileImages];
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
+          .update({
+        'profileImages': updatedImages,
+        'photoUrl': url, // yangi rasm asosiy
+      });
+
+      state = state.copyWith(
+        profileImages: updatedImages,
+        photoUrl: url,
+        isUploading: false,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(isUploading: false);
+      return false;
+    }
+  }
+// providers/profile_provider.dart (qo‘shilgan funksiya)
+  // providers/profile_provider.dart
+
+  Future<bool> removeProfileImage(int index) async {
+    try {
+      state = state.copyWith(isUploading: true);
+
+      final imageUrlToDelete = state.profileImages[index];
+      final updatedImages = List<String>.from(state.profileImages)..removeAt(index);
+      final newMainPhoto = updatedImages.isNotEmpty ? updatedImages.first : null;
+
+      // 1. Storage'dan o‘chirish
+      try {
+        final ref = FirebaseStorage.instance.refFromURL(imageUrlToDelete);
+        await ref.delete();
+      } catch (e) {
+        print("Storage'dan o‘chirishda xato: $e");
+        // Agar o‘chirilmasa ham, davom etamiz (rasm yo‘q bo‘lishi mumkin)
+      }
+
+      // 2. Firestore'dan yangilash
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser!.uid)
+          .update({
+        'profileImages': updatedImages,
+        'photoUrl': newMainPhoto,
+      });
+
+      // 3. State yangilash
+      state = state.copyWith(
+        profileImages: updatedImages,
+        photoUrl: newMainPhoto,
+        isUploading: false,
+      );
+
+      return true;
+    } catch (e) {
+      state = state.copyWith(isUploading: false);
+      print("Rasm o‘chirishda xato: $e");
+      return false;
+    }
+  }
   Future<bool> updateProfilePicture() async {
     try {
-
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(source: ImageSource.gallery);
       if (pickedFile == null) return false;
@@ -110,7 +180,6 @@ class ProfileNotifier extends StateNotifier<ProfileModel> {
   }
 }
 
-final profileProvider =
-StateNotifierProvider<ProfileNotifier, ProfileModel>((ref) {
+final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileModel>((ref) {
   return ProfileNotifier();
 });

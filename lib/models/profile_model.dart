@@ -1,3 +1,6 @@
+// models/profile_model.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ProfileModel {
   final String? photoUrl;
   final String? name;
@@ -6,6 +9,7 @@ class ProfileModel {
   final bool isUploading;
   final DateTime? createdAt;
   final String? userId;
+  final List<String> profileImages; // YANGI
 
   ProfileModel({
     this.photoUrl,
@@ -15,6 +19,7 @@ class ProfileModel {
     this.isUploading = false,
     this.createdAt,
     this.userId,
+    this.profileImages = const [],
   });
 
   ProfileModel copyWith({
@@ -25,6 +30,7 @@ class ProfileModel {
     bool? isLoading,
     bool? isUploading,
     String? userId,
+    List<String>? profileImages,
   }) {
     return ProfileModel(
       photoUrl: photoUrl ?? this.photoUrl,
@@ -34,28 +40,24 @@ class ProfileModel {
       isLoading: isLoading ?? this.isLoading,
       isUploading: isUploading ?? this.isUploading,
       userId: userId ?? this.userId,
+      profileImages: profileImages ?? this.profileImages,
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'photoUrl': photoUrl,
-      'name': name,
-      'email': email,
-      'createdAt': createdAt?.toIso8601String(),
-      'userId': userId,
-    };
   }
 
   factory ProfileModel.fromMap(Map<String, dynamic> map) {
     return ProfileModel(
-      photoUrl: map['photoUrl'],
+      photoUrl: map['photoUrl'] ?? map['photoURL'],
       name: map['name'],
       email: map['email'],
       createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'])
+          ? (map['createdAt'] is Timestamp
+          ? (map['createdAt'] as Timestamp).toDate()
+          : DateTime.tryParse(map['createdAt']))
           : null,
-      userId: map['userId'],
+      userId: map['userId'] ?? map['uid'],
+      profileImages: map['profileImages'] != null
+          ? List<String>.from(map['profileImages'])
+          : [],
     );
   }
 }

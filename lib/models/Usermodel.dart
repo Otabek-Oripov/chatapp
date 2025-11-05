@@ -1,7 +1,9 @@
+// models/Usermodel.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserModel {
   final String? photoUrl;
+  final List<String> profileImages;
   final String uid;
   final String name;
   final String email;
@@ -10,6 +12,7 @@ class UserModel {
 
   UserModel({
     this.photoUrl,
+    this.profileImages = const [],
     required this.uid,
     required this.name,
     required this.email,
@@ -17,9 +20,9 @@ class UserModel {
     required this.lastSeen,
   });
 
-  /// copyWith funksiyasi
   UserModel copyWith({
     String? photoUrl,
+    List<String>? profileImages,
     String? uid,
     String? name,
     String? email,
@@ -28,6 +31,7 @@ class UserModel {
   }) {
     return UserModel(
       photoUrl: photoUrl ?? this.photoUrl,
+      profileImages: profileImages ?? this.profileImages,
       uid: uid ?? this.uid,
       name: name ?? this.name,
       email: email ?? this.email,
@@ -36,10 +40,12 @@ class UserModel {
     );
   }
 
-  /// Firestore dan model yaratish
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       photoUrl: map['photoUrl'],
+      profileImages: map['profileImages'] != null
+          ? List<String>.from(map['profileImages'])
+          : [],
       uid: map['uid'] ?? '',
       name: map['name'] ?? '',
       email: map['email'] ?? '',
@@ -50,10 +56,10 @@ class UserModel {
     );
   }
 
-  /// Modelni Firestorega yozish uchun
   Map<String, dynamic> toMap() {
     return {
       'photoUrl': photoUrl,
+      'profileImages': profileImages,
       'uid': uid,
       'name': name,
       'email': email,

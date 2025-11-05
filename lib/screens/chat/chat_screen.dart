@@ -309,7 +309,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ref,
             widget.chatId,
           ),
-        ],
+          PopupMenuButton(
+            onSelected: (value) async {
+              if (value == 'unfriend') {
+                final result = await showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text("Unfriend User"),
+                    content: Text(
+                      'Are you sure you want to unfriend ${widget.othersUser.name}?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Unfriend'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (result == true) {
+                  final unfriendResult = await chatService.unfriendUser(
+                    widget.chatId,
+                    widget.othersUser.uid,
+                  );
+                  if (unfriendResult == 'success' && context.mounted) {
+                    Navigator.pop(context);
+                    showAppSnackbar(
+                      context: context,
+                      type: SnackbarType.success,
+                      description: 'Your friendship disconnected',
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'unfriend', child: Text('Unfriend')),
+            ],
+          ),
+         ],
       ),
       body: Column(
         children: [
@@ -334,6 +377,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 return ListView.builder(
                   controller: _scrollController,
                   reverse: true,
+                  cacheExtent: 1000,
+                  // Yangi: eski itemlarni cache qiladi
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
@@ -350,7 +395,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       final accentColor = isMe
                           ? Colors.white
                           : Colors.blueAccent;
+
                       return CustomAudioBubble(
+                        key: ValueKey(message.messageId),
+                        // Unikal
+                        uniqueId: message.messageId,
+                        // Yangi
                         audioUrl: message.audioUrl ?? '',
                         isMe: isMe,
                         bubbleColor: bubbleColor,
@@ -374,7 +424,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                         message: message,
                       );
                     }
-                    if (isSystem){
+                    if (isSystem) {
                       return Container(
                         margin: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -428,13 +478,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             child: Row(
               children: [
                 IconButton(
+                    onPressed: isUploading ? null : _showImageOptions,
                   icon: Icon(
-                    Icons.photo_library_outlined,
-                    color: isUploading ? Colors.grey : Colors.blueAccent,
+                    Icons.image,
+                    size: 30,
+                    color: isUploading ? Colors.grey : Colors.blue,
                   ),
-                  onPressed: isUploading
-                      ? null
-                      : () => _pickImage(ImageSource.gallery),
                 ),
                 Expanded(
                   child: TextField(
@@ -522,6 +571,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ),
           ),
         ],
+      ),
+
+    );
+
+  }
+  void _showImageOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cancel),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
       ),
     );
   }

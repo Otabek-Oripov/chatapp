@@ -342,7 +342,7 @@ class ChatService {
       final otherUserId = participants.firstWhere((id) => id != currentUserId);
 
       batch.update(_firestore.collection('chats').doc(chatId), {
-        'lastMessage': (caption?.isNotEmpty ?? false) ? caption : '📷 Photo',
+        'lastMessage': (caption?.isNotEmpty ?? false) ? caption : 'Photo',
         'lastMessageTime': FieldValue.serverTimestamp(),
         'lastSenderId': currentUserId,
         'unreadCount.$otherUserId': FieldValue.increment(1),

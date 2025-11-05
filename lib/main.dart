@@ -111,10 +111,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: SignupScreen()
-      // FirebaseAuth.instance.currentUser == null
-      //     ? const SignupScreen()
-      //     : const Homescreen(),
+      home:
+      FirebaseAuth.instance.currentUser == null
+          ? const SignupScreen()
+          : const Homescreen(),
     );
   }
 }

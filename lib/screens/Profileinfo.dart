@@ -1,7 +1,9 @@
+// widgets/ProfileInfo.dart
 import 'package:chatapp/models/Usermodel.dart';
 import 'package:chatapp/widgets/widgetImage.dart';
-import 'package:flutter/material.dart';
 
+// import 'package:chatapp/widgets/FullImageView.dart';
+import 'package:flutter/material.dart';
 
 class ProfileInfo extends StatelessWidget {
   final UserModel info;
@@ -15,10 +17,7 @@ class ProfileInfo extends StatelessWidget {
       appBar: AppBar(
         title: Text(
           info.name.isNotEmpty ? info.name : 'User',
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
@@ -28,11 +27,14 @@ class ProfileInfo extends StatelessWidget {
           children: [
             GestureDetector(
               onTap: () {
-                if (info.photoUrl != null && info.photoUrl!.isNotEmpty) {
+                if (info.profileImages.isNotEmpty) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => FullImageView(imageUrl: info.photoUrl!,),
+                      builder: (_) => FullImageView(
+                        imageUrls: info.profileImages,
+                        initialIndex: 0,
+                      ),
                     ),
                   );
                 }
@@ -41,19 +43,19 @@ class ProfileInfo extends StatelessWidget {
                 tag: 'profileImage_${info.uid}',
                 child: CircleAvatar(
                   radius: 70,
-                  backgroundImage: info.photoUrl != null
-                      ? NetworkImage(info.photoUrl!)
+                  backgroundImage: info.profileImages.isNotEmpty
+                      ? NetworkImage(info.profileImages.first)
                       : null,
-                  child: info.photoUrl == null
+                  child: info.profileImages.isEmpty
                       ? Text(
-                    info.name.isNotEmpty
-                        ? info.name[0].toUpperCase()
-                        : 'U',
-                    style: const TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  )
+                          info.name.isNotEmpty
+                              ? info.name[0].toUpperCase()
+                              : 'U',
+                          style: const TextStyle(
+                            fontSize: 40,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
                       : null,
                 ),
               ),

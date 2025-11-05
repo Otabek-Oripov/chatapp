@@ -6,10 +6,17 @@ import 'package:chatapp/services/chatService.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:just_audio/just_audio.dart';
 
 // Auth State Provider
 final authStateProvider = StreamProvider<User?>((ref) {
   return FirebaseAuth.instance.authStateChanges();
+});
+
+final audioPlayerProvider = Provider<AudioPlayer>((ref) {
+  final player = AudioPlayer();
+  ref.onDispose(() => player.dispose());
+  return player;
 });
 
 // Chat Service Provider
