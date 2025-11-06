@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:chatapp/function/snakbar.dart';
+import 'package:chatapp/main.dart';
 import 'package:chatapp/models/Usermodel.dart';
 import 'package:chatapp/providers/provide.dart';
 import 'package:chatapp/widgets/custom_audio_bubble.dart';
@@ -50,6 +51,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   void initState() {
     super.initState();
+    OnlineStatusService();
     _textFieldFocusNode.addListener(() {
       if (_textFieldFocusNode.hasFocus) {
         _handleTextFieldFocus();

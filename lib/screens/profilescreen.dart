@@ -1,5 +1,6 @@
 // screens/ProfileScreen.dart
 import 'package:chatapp/function/snakbar.dart';
+import 'package:chatapp/main.dart';
 import 'package:chatapp/providers/profile_provider.dart';
 import 'package:chatapp/providers/provide.dart';
 import 'package:chatapp/providers/userListPProvider.dart';
@@ -22,6 +23,12 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String? lastUserId;
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    OnlineStatusService();
+  }
 
   @override
   Widget build(BuildContext context) {

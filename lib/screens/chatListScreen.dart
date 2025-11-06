@@ -1,3 +1,4 @@
+import 'package:chatapp/main.dart';
 import 'package:chatapp/models/Usermodel.dart';
 import 'package:chatapp/providers/provide.dart';
 import 'package:chatapp/providers/user_status_provider.dart';
@@ -19,6 +20,7 @@ class _ChatlistscreenState extends ConsumerState<Chatlistscreen> {
   @override
   void initState() {
     super.initState();
+    OnlineStatusService();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.invalidate(requestsProvider);
       ref.invalidate(chatsProvider);

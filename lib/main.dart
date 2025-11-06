@@ -1,6 +1,7 @@
+// main.dart (to‘liq almashtiring!)
 import 'dart:async';
 
-import 'package:bugsnag_flutter/bugsnag_flutter.dart' show Bugsnag, bugsnag;
+import 'package:bugsnag_flutter/bugsnag_flutter.dart';
 import 'package:chatapp/screens/HomeScreen.dart';
 import 'package:chatapp/screens/Sign.Up_screen.dart';
 import 'package:chatapp/secret/secret.dart';
@@ -15,56 +16,100 @@ import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await bugsnag.start(apiKey: '2810e799cb2322b010c8189baf552854');
 
   runZonedGuarded(
-    () async {
+        () async {
       await Firebase.initializeApp();
-      await requestPermission();
 
-      final user = FirebaseAuth.instance.currentUser;
-      final String userId = user?.uid ?? "guest_000";
-      final String userName = user?.displayName ?? "Guest";
+      await _requestPermissions();
 
-      ZegoUIKitPrebuiltCallInvitationService().setNavigatorKey(navigatorKey);
+      await _initZego(); // ESKI PROJECT BILAN INIT
 
-      try {
-        await ZegoUIKitPrebuiltCallInvitationService().init(
-          appID: ZegoConfig.appId,
-          appSign: ZegoConfig.appSign,
-          userID: userId,
-          userName: userName,
-          plugins: [ZegoUIKitSignalingPlugin()],
-        );
-        print('Zego Initialized Successfully');
-      } catch (error, stackTrace) {
-        print('Zego initialization error: $error');
-        bugsnag.notify(error, stackTrace);
-      }
+      OnlineStatusService.initialize();
 
-      runApp(ProviderScope(child: MyApp(navigatorKey: navigatorKey)));
+      runApp(
+        ProviderScope(
+          child: MyApp(navigatorKey: navigatorKey),
+        ),
+      );
     },
-    (error, stackTrace) {
-      // This catches any unhandled async errors
+        (error, stackTrace) {
       bugsnag.notify(error, stackTrace);
     },
   );
 }
 
-Future<void> requestPermission() async {
-  await [
-    Permission.camera,
-    Permission.microphone,
-    Permission.notification,
-  ].request();
+// PERMISSIONS
+Future<void> _requestPermissions() async {
+  final statuses = await [Permission.camera, Permission.microphone, Permission.notification].request();
+  final denied = statuses.entries.where((e) => !e.value.isGranted).map((e) => e.key).toList();
+  if (denied.isNotEmpty) print("Ruxsat berilmadi: $denied");
 }
 
+// ZEGO INIT — ESKI PROJECT BILAN (CHAT UCHUN)
+Future<void> _initZego() async {
+  final user = FirebaseAuth.instance.currentUser;
+  final userId = user?.uid ?? "guest_${DateTime.now().millisecondsSinceEpoch}";
+  final userName = user?.displayName ?? "Guest";
+
+  ZegoUIKitPrebuiltCallInvitationService().setNavigatorKey(navigatorKey);
+
+  await ZegoUIKitPrebuiltCallInvitationService().init(
+    appID: ZegoConfig.appId, // ESKI 1757546724
+    appSign: ZegoConfig.appSign,
+    userID: userId,
+    userName: userName,
+    plugins: [ZegoUIKitSignalingPlugin()],
+  );
+  print('Zego chat uchun init bo‘ldi: $userId');
+}
+
+// ONLINE STATUS (oldingidek)
+class OnlineStatusService {
+  static final _chatService = ChatService();
+  static final _observer = _AppLifecycleObserver();
+
+  static void initialize() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    WidgetsBinding.instance.addObserver(_observer);
+    _setOnline(true);
+  }
+
+  static Future<void> _setOnline(bool online) async {
+    try {
+      await _chatService.updateUserOnlineStatus(online);
+    } catch (e, s) {
+      print("Online status error: $e");
+      bugsnag.notify(e, s);
+    }
+  }
+
+  static void dispose() {
+    WidgetsBinding.instance.removeObserver(_observer);
+    _setOnline(false);
+  }
+}
+
+class _AppLifecycleObserver with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.resumed) {
+      await OnlineStatusService._setOnline(true);
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached || state == AppLifecycleState.inactive) {
+      await OnlineStatusService._setOnline(false);
+    }
+  }
+}
+
+// MY APP (oldingidek)
 class MyApp extends StatefulWidget {
   final GlobalKey<NavigatorState> navigatorKey;
-
   const MyApp({super.key, required this.navigatorKey});
 
   @override
@@ -72,33 +117,15 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  final ChatService _chatService = ChatService();
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-
-    // App ishga tushganda foydalanuvchini online qilish
-    _chatService.updateUserOnlineStatus(true);
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // App fon rejimiga o'tganda offline, ochilganda online bo‘ladi
-    if (state == AppLifecycleState.resumed) {
-      _chatService.updateUserOnlineStatus(true);
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.detached) {
-      _chatService.updateUserOnlineStatus(false);
-    }
+    OnlineStatusService.initialize();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _chatService.updateUserOnlineStatus(false);
+    OnlineStatusService.dispose();
     super.dispose();
   }
 
@@ -111,8 +138,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home:
-      FirebaseAuth.instance.currentUser == null
+      home: FirebaseAuth.instance.currentUser == null
           ? const SignupScreen()
           : const Homescreen(),
     );
