@@ -52,7 +52,6 @@ class UserLoginScreen extends ConsumerWidget {
             colors: [Color(0xFFff6b6b), Color(0xFFfeca57)],
           ),
         ),
-        child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -193,7 +192,7 @@ class UserLoginScreen extends ConsumerWidget {
             ),
           ),
         ),
-      ),
+
     );
   }
 

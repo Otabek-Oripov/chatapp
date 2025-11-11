@@ -1,17 +1,18 @@
+// lib/models/MessageModel.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MessageModel {
   final String messageId;
   final String senderId;
   final String message;
-  final String type; // text, image, call, system
+  final String type;
   final DateTime timestamp;
   final String? imageUrl;
   final String? audioUrl;
   final String? readBy;
-  final String? callType; // "audio" yoki "video"
-  final String? callStatus; // "missed", "answered", "rejected"
-  final String? chatId; // chat ID uchun qo‘shimcha (agar kerak bo‘lsa)
+  final String? callType;
+  final String? callStatus;
+  final String? chatId;
 
   MessageModel({
     required this.messageId,
@@ -24,7 +25,7 @@ class MessageModel {
     this.readBy,
     this.callType,
     this.callStatus,
-     this.chatId,
+    this.chatId,
   });
 
   factory MessageModel.fromMap(Map<String, dynamic> data, String messageId) {
@@ -33,15 +34,14 @@ class MessageModel {
       senderId: data['senderId'] ?? '',
       message: data['message'] ?? '',
       type: data['type'] ?? 'text',
-      timestamp: data['timestamp'] is Timestamp
-          ? (data['timestamp'] as Timestamp).toDate()
-          : Timestamp.now().toDate(),
+      timestamp:
+      (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
       imageUrl: data['imageUrl'],
       audioUrl: data['audioUrl'],
       readBy: data['readBy'],
-      callType: data['callType'],       // 🔹 qo‘shildi
-      callStatus: data['callStatus'],   // 🔹 qo‘shildi
-      chatId: data['chatId'],           // 🔹 ixtiyoriy
+      callType: data['callType'],
+      callStatus: data['callStatus'],
+      chatId: data['chatId'],
     );
   }
 
@@ -54,9 +54,9 @@ class MessageModel {
       'imageUrl': imageUrl,
       'audioUrl': audioUrl,
       'readBy': readBy,
-      'callType': callType,      // 🔹 qo‘shildi
-      'callStatus': callStatus,  // 🔹 qo‘shildi
-      'chatId': chatId,          // 🔹 ixtiyoriy
+      'callType': callType,
+      'callStatus': callStatus,
+      'chatId': chatId,
     };
   }
 }

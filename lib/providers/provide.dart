@@ -201,8 +201,10 @@ class TypingNotifier extends StateNotifier<Map<String, bool>> {
   }
 }
 
+
 final typingProvider = StateNotifierProvider.family<
     TypingNotifier, Map<String, bool>, String>((ref, chatId) {
   final service = ref.watch(chatServiceProvider);
   return TypingNotifier(service, chatId);
 });
+final chatSearchQueryProvider = StateProvider<String>((ref) => '');

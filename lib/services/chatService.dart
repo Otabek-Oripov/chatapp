@@ -1,3 +1,4 @@
+// lib/services/ChatService.dart
 import 'dart:io';
 import 'package:chatapp/models/MessageModel.dart';
 import 'package:chatapp/models/MessageRequestModel.dart';
@@ -24,13 +25,13 @@ class ChatService {
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
-              .map((doc) => UserModel.fromMap(doc.data()))
-              .where((user) => user.uid != currentUserId)
-              .toList(),
-        );
+          .map((doc) => UserModel.fromMap(doc.data()))
+          .where((user) => user.uid != currentUserId)
+          .toList(),
+    );
   }
 
-  ///  Update user online status
+  /// Update user online status
   Future<void> updateUserOnlineStatus(bool isOnline) async {
     if (currentUserId.isEmpty) return;
     try {
@@ -46,14 +47,12 @@ class ChatService {
   /// Check if users are friends
   Future<bool> areUsersFriends(String userID1, String userID2) async {
     final chatId = generateChatID(userID1, userID2);
-    final friendshipDoc = await _firestore
-        .collection("friendships")
-        .doc(chatId)
-        .get();
+    final friendshipDoc =
+    await _firestore.collection("friendships").doc(chatId).get();
     return friendshipDoc.exists;
   }
 
-  /// Unfriend user (delete chats + messages)
+  /// Unfriend user
   Future<String> unfriendUser(String chatId, String friendId) async {
     try {
       final batch = _firestore.batch();
@@ -87,10 +86,8 @@ class ChatService {
       final currentUser = _firebaseAuth.currentUser!;
       final requestId = '${currentUserId}_$receiverId';
 
-      final userDoc = await _firestore
-          .collection("users")
-          .doc(currentUserId)
-          .get();
+      final userDoc =
+      await _firestore.collection("users").doc(currentUserId).get();
       String? userPhotoUrl;
       if (userDoc.exists) {
         final userModel = UserModel.fromMap(userDoc.data()!);
@@ -137,17 +134,19 @@ class ChatService {
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
-              .map((doc) => MessagerequestModel.fromMap(doc.data()))
-              .toList(),
-        );
+          .map((doc) => MessagerequestModel.fromMap(doc.data()))
+          .toList(),
+    );
   }
 
-  /// Accept message request (creates chat + friendship)
-  Future<String> acceptMessageRequest(String requestId, String senderId) async {
+  /// Accept message request
+  Future<String> acceptMessageRequest(
+      String requestId, String senderId) async {
     try {
       final batch = _firestore.batch();
 
-      batch.update(_firestore.collection('messageRequests').doc(requestId), {
+      batch.update(
+          _firestore.collection('messageRequests').doc(requestId), {
         'status': 'accepted',
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -187,17 +186,19 @@ class ChatService {
   }
 
   /// Reject message request
-  Future<String> rejectMessageRequest(
-    String requestId, {
-    bool deleteRequest = true,
-  }) async {
+  Future<String> rejectMessageRequest(String requestId,
+      {bool deleteRequest = true}) async {
     try {
       if (deleteRequest) {
-        await _firestore.collection('messageRequests').doc(requestId).delete();
+        await _firestore
+            .collection('messageRequests')
+            .doc(requestId)
+            .delete();
       } else {
-        await _firestore.collection('messageRequests').doc(requestId).update({
-          'status': 'rejected',
-        });
+        await _firestore
+            .collection('messageRequests')
+            .doc(requestId)
+            .update({'status': 'rejected'});
       }
       return 'success';
     } catch (e) {
@@ -216,17 +217,20 @@ class ChatService {
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
-              .map((doc) => ChatModel.fromMap(doc.data()))
-              .toList(),
-        );
+          .map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return ChatModel.fromMap(data, doc.id);
+      })
+          .toList(),
+    );
   }
 
   /// Get messages for a chat
   Stream<List<MessageModel>> getChatMessages(
-    String chatId, {
-    int limit = 20,
-    DocumentSnapshot? lastDocument,
-  }) {
+      String chatId, {
+        int limit = 20,
+        DocumentSnapshot? lastDocument,
+      }) {
     Query query = _firestore
         .collection('messages')
         .where('chatId', isEqualTo: chatId)
@@ -236,15 +240,12 @@ class ChatService {
     if (lastDocument != null) {
       query = query.startAfterDocument(lastDocument);
     }
-
     return query.snapshots().map(
-      (snapshot) => snapshot.docs
-          .map(
-            (doc) => MessageModel.fromMap(
-              doc.data() as Map<String, dynamic>,
-              chatId,
-            ),
-          )
+          (snapshot) => snapshot.docs
+          .map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return MessageModel.fromMap(data, doc.id);
+      })
           .toList(),
     );
   }
@@ -270,15 +271,18 @@ class ChatService {
         'readBy': null,
       });
 
-      final chatDoc = await _firestore.collection('chats').doc(chatId).get();
+      final chatDoc =
+      await _firestore.collection('chats').doc(chatId).get();
       if (!chatDoc.exists) return 'Chat not found';
 
       final participants = List<String>.from(chatDoc['participants']);
-      final otherUserId = participants.firstWhere((id) => id != currentUserId);
+      final otherUserId =
+      participants.firstWhere((id) => id != currentUserId);
 
       batch.update(_firestore.collection('chats').doc(chatId), {
         'lastMessage': message,
         'lastMessageTime': FieldValue.serverTimestamp(),
+        'lastMessageId': messageId,
         'lastSenderId': currentUserId,
         'unreadCount.$otherUserId': FieldValue.increment(1),
         'unreadCount.$currentUserId': 0,
@@ -292,7 +296,7 @@ class ChatService {
     }
   }
 
-  /// Upload image and return URL
+  /// Upload image
   Future<String> uploadImage(File imageFile, String chatId) async {
     try {
       final fileName =
@@ -335,15 +339,18 @@ class ChatService {
         'type': 'image',
       });
 
-      final chatDoc = await _firestore.collection('chats').doc(chatId).get();
+      final chatDoc =
+      await _firestore.collection('chats').doc(chatId).get();
       if (!chatDoc.exists) return 'Chat not found';
 
       final participants = List<String>.from(chatDoc['participants']);
-      final otherUserId = participants.firstWhere((id) => id != currentUserId);
+      final otherUserId =
+      participants.firstWhere((id) => id != currentUserId);
 
       batch.update(_firestore.collection('chats').doc(chatId), {
         'lastMessage': (caption?.isNotEmpty ?? false) ? caption : 'Photo',
         'lastMessageTime': FieldValue.serverTimestamp(),
+        'lastMessageId': messageId,
         'lastSenderId': currentUserId,
         'unreadCount.$otherUserId': FieldValue.increment(1),
         'unreadCount.$currentUserId': 0,
@@ -357,21 +364,16 @@ class ChatService {
     }
   }
 
-  /// Send + upload image in one
+  /// Send + upload image
   Future<String> sendImageUpload({
     required String chatId,
     required File imageFile,
     String? caption,
   }) async {
     final imageUrl = await uploadImage(imageFile, chatId);
-    if (imageUrl.isEmpty) {
-      return 'Failed to upload image';
-    }
+    if (imageUrl.isEmpty) return 'Failed to upload image';
     return await sendImageMessage(
-      chatId: chatId,
-      imageUrl: imageUrl,
-      caption: caption,
-    );
+        chatId: chatId, imageUrl: imageUrl, caption: caption);
   }
 
   /// Add Call History
@@ -384,8 +386,9 @@ class ChatService {
     try {
       final currentUser = _firebaseAuth.currentUser!;
       final messageId = _firestore.collection('messages').doc().id;
+      final batch = _firestore.batch();
 
-      await _firestore.collection('messages').doc(messageId).set({
+      batch.set(_firestore.collection('messages').doc(messageId), {
         'messageId': messageId,
         'chatId': chatId,
         'senderId': currentUserId,
@@ -396,15 +399,27 @@ class ChatService {
         'callStatus': callStatus,
         'duration': duration ?? 0,
         'type': 'call',
+        'readBy': null,
       });
 
-      /// Update chat list preview
-      await _firestore.collection('chats').doc(chatId).update({
-        'lastMessage': '${isVideoCall ? 'Video' : 'Audio'} call ($callStatus)',
+      final chatDoc =
+      await _firestore.collection('chats').doc(chatId).get();
+      if (!chatDoc.exists) return 'Chat not found';
+
+      final participants = List<String>.from(chatDoc['participants']);
+      final otherUserId =
+      participants.firstWhere((id) => id != currentUserId);
+
+      batch.update(_firestore.collection('chats').doc(chatId), {
+        'lastMessage': isVideoCall ? 'Video call' : 'Audio call',
         'lastMessageTime': FieldValue.serverTimestamp(),
+        'lastMessageId': messageId,
         'lastSenderId': currentUserId,
+        'unreadCount.$otherUserId': FieldValue.increment(1),
+        'unreadCount.$currentUserId': 0,
       });
 
+      await batch.commit();
       return 'success';
     } catch (e) {
       print("Error adding call history: $e");
@@ -412,7 +427,7 @@ class ChatService {
     }
   }
 
-  ///Mark all messages as read
+  /// Mark all messages as read
   Future<void> markMessageAsRead(String chatId) async {
     final currentUser = _firebaseAuth.currentUser;
     if (currentUser == null) return;
@@ -420,45 +435,36 @@ class ChatService {
     try {
       final batch = _firestore.batch();
 
-      // 1. Chat info
       final chatRef = _firestore.collection('chats').doc(chatId);
       batch.update(chatRef, {
         'unreadCount.${currentUser.uid}': 0,
         'lastReadTime.${currentUser.uid}': FieldValue.serverTimestamp(),
       });
 
-      // 2. Faqat chatId va readBy null bo'lganlarni olish
       final messageQuery = await _firestore
           .collection('messages')
           .where('chatId', isEqualTo: chatId)
-          .where('readBy', isNull: true) // Faqat o'qilmaganlar
+          .where('readBy', isNull: true)
           .get();
 
-      print('Found ${messageQuery.docs.length} unread messages');
-
-      // 3. senderId != currentUser.uid bo'lganlarni filter qilish (client-side)
       for (final doc in messageQuery.docs) {
         final data = doc.data();
         final senderId = data['senderId'] as String?;
-
         if (senderId != null && senderId != currentUser.uid) {
           batch.update(doc.reference, {'readBy': currentUser.uid});
         }
       }
 
-      // 4. Commit
       await batch.commit();
-      print('Messages marked as read');
     } catch (e) {
       print("Error marking messages as read: $e");
     }
   }
 
-  /// Typing indicator///
+  /// Typing indicator
   Stream<Map<String, bool>> getTypingStatus(String chatId) {
     return _firestore.collection('chats').doc(chatId).snapshots().map((doc) {
       if (!doc.exists) return <String, bool>{};
-
       final data = doc.data() as Map<String, dynamic>;
       final typing = data['typing'] as Map<String, dynamic>? ?? {};
       final typingTimeStamp =
@@ -483,14 +489,13 @@ class ChatService {
 
   Future<void> setTypingStatus(String chatId, bool isTyping) async {
     if (currentUserId.isEmpty) return;
-
     try {
       await _firestore.collection("chats").doc(chatId).update({
         'typing.$currentUserId': isTyping,
         'typingTimeStamp.$currentUserId': FieldValue.serverTimestamp(),
       });
       if (!isTyping) {
-        Future.delayed(Duration(seconds: 1), () async {
+        Future.delayed(const Duration(seconds: 1), () async {
           try {
             await _firestore.collection("chats").doc(chatId).update({
               'typing.$currentUserId': false,
@@ -499,10 +504,11 @@ class ChatService {
         });
       }
     } catch (e) {
-      print('Error uptading typing status: $e');
+      print('Error updating typing status: $e');
     }
   }
 
+  /// Upload audio
   Future<String> uploadAudio(File audioFile, String chatId) async {
     try {
       final fileName =
@@ -522,6 +528,7 @@ class ChatService {
     }
   }
 
+  /// Send audio message
   Future<String> sendAudioMessage({
     required String chatId,
     required String audioUrl,
@@ -529,8 +536,9 @@ class ChatService {
     try {
       final currentUser = _firebaseAuth.currentUser!;
       final messageId = _firestore.collection('messages').doc().id;
+      final batch = _firestore.batch();
 
-      await _firestore.collection('messages').doc(messageId).set({
+      batch.set(_firestore.collection('messages').doc(messageId), {
         'messageId': messageId,
         'senderId': currentUserId,
         'senderName': currentUser.displayName ?? "User",
@@ -542,12 +550,24 @@ class ChatService {
         'readBy': null,
       });
 
-      await _firestore.collection('chats').doc(chatId).update({
-        'lastMessage': '🎙 Voice message',
+      final chatDoc =
+      await _firestore.collection('chats').doc(chatId).get();
+      if (!chatDoc.exists) return 'Chat not found';
+
+      final participants = List<String>.from(chatDoc['participants']);
+      final otherUserId =
+      participants.firstWhere((id) => id != currentUserId);
+
+      batch.update(_firestore.collection('chats').doc(chatId), {
+        'lastMessage': 'Voice message',
         'lastMessageTime': FieldValue.serverTimestamp(),
+        'lastMessageId': messageId,
         'lastSenderId': currentUserId,
+        'unreadCount.$otherUserId': FieldValue.increment(1),
+        'unreadCount.$currentUserId': 0,
       });
 
+      await batch.commit();
       return 'success';
     } catch (e) {
       print('Error sending audio: $e');
@@ -555,20 +575,100 @@ class ChatService {
     }
   }
 
+  /// Send audio upload
   Future<String> sendAudioUpload({
     required String chatId,
     required File audioFile,
   }) async {
     final audioUrl = await uploadAudio(audioFile, chatId);
-    if (audioUrl.isEmpty) {
-      return 'Failed to upload audio';
-    }
-    return await sendAudioMessage(
-      chatId: chatId,
-      audioUrl: audioUrl,
-    );
+    if (audioUrl.isEmpty) return 'Failed to upload audio';
+    return await sendAudioMessage(chatId: chatId, audioUrl: audioUrl);
   }
 
+  // --------------------------------------------------------------
+  //  DELETE MESSAGE (FOR EVERYONE) – TO‘LIQ TUGALLANGAN VERSIYA
+  // --------------------------------------------------------------
+  Future<String> deleteMessage({
+    required String chatId,
+    required String messageId,
+  }) async {
+    try {
+      final messageRef = _firestore.collection('messages').doc(messageId);
+      final messageSnap = await messageRef.get();
+
+      if (!messageSnap.exists) return 'Message not found';
+
+      final senderId = messageSnap['senderId'] as String?;
+      if (senderId != currentUserId) {
+        return 'You can only delete your own messages';
+      }
+
+      final batch = _firestore.batch();
+      batch.delete(messageRef);
+
+      final chatRef = _firestore.collection('chats').doc(chatId);
+      final chatSnap = await chatRef.get();
+
+      if (chatSnap.exists) {
+        final data = chatSnap.data() as Map<String, dynamic>;
+
+        // Agar o‘chirilayotgan xabar oxirgi xabar bo‘lsa
+        if (data['lastMessageId'] == messageId) {
+          // Yangi oxirgi xabarni topish
+          final lastMessagesQuery = await _firestore
+              .collection('messages')
+              .where('chatId', isEqualTo: chatId)
+              .orderBy('timestamp', descending: true)
+              .limit(1)
+              .get();
+
+          if (lastMessagesQuery.docs.isNotEmpty) {
+            final newDoc = lastMessagesQuery.docs.first;
+            final newData = newDoc.data();
+
+            String lastMessageText = '';
+            switch (newData['type']) {
+              case 'image':
+                lastMessageText = (newData['message']?.toString().isNotEmpty ??
+                    false)
+                    ? newData['message']
+                    : 'Photo';
+                break;
+              case 'audio':
+                lastMessageText = 'Voice message';
+                break;
+              case 'call':
+                lastMessageText =
+                newData['callType'] == 'video' ? 'Video call' : 'Audio call';
+                break;
+              default:
+                lastMessageText = newData['message'] ?? '';
+            }
+
+            batch.update(chatRef, {
+              'lastMessage': lastMessageText,
+              'lastMessageTime': newData['timestamp'],
+              'lastMessageId': newDoc.id,
+              'lastSenderId': newData['senderId'],
+            });
+          } else {
+            // Hech qanday xabar qolmagan
+            batch.update(chatRef, {
+              'lastMessage': 'Chat cleared',
+              'lastMessageTime': FieldValue.serverTimestamp(),
+              'lastMessageId': null,   // null – to‘g‘ri
+              'lastSenderId': null,
+            });
+          }
+        }
+        // Aks holda hech narsa qilmaslik kerak
+      }
+
+      await batch.commit();
+      return 'success';
+    } catch (e) {
+      print('Delete error: $e');
+      return e.toString();
+    }
+  }
 }
-
-
