@@ -1,18 +1,17 @@
+// lib/screens/LoginScreen.dart — TO‘LIQ ALMASHTIRING!
 import 'package:chatapp/screens/HomeScreen.dart';
+import 'package:chatapp/screens/Sign.Up_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../function/Buttons.dart';
 import '../function/snakbar.dart';
 import '../providers/auth.provider.dart';
 import '../services/auth.service.dart';
-import 'Sign.Up_screen.dart';
 
 class UserLoginScreen extends ConsumerWidget {
   const UserLoginScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final height = MediaQuery.of(context).size.height;
     final formState = ref.watch(authFormProvider);
     final formNotifier = ref.read(authFormProvider.notifier);
     final authMethod = ref.read(authMethodProvider);
@@ -23,7 +22,6 @@ class UserLoginScreen extends ConsumerWidget {
         email: formState.email,
         password: formState.password,
       );
-
       if (!context.mounted) return;
       formNotifier.setLoading(false);
 
@@ -31,9 +29,8 @@ class UserLoginScreen extends ConsumerWidget {
         showAppSnackbar(
           context: context,
           type: SnackbarType.success,
-          description: "Successful Login",
+          description: "Xush kelibsiz!",
         );
-
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const Homescreen()),
         );
@@ -46,91 +43,147 @@ class UserLoginScreen extends ConsumerWidget {
       }
     }
 
-
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            SizedBox(
-              height: height / 2.1,
-              width: double.infinity,
-              child: Image.asset(
-                "assets/2752392.jpg",
-                fit: BoxFit.cover,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(15),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFff6b6b), Color(0xFFfeca57)],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  TextField(
-                    autocorrect: false,
-                    onChanged: formNotifier.updateEmail,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.email),
-                      labelText: "Enter your email",
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.all(15),
-                      errorText: formState.emailError,
+                  const SizedBox(height: 50),
+                  Container(
+                    padding: const EdgeInsets.all(25),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: Colors.black26, blurRadius: 20),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.flutter_dash,
+                      size: 80,
+                      color: Color(0xFFff6b6b),
                     ),
                   ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    autocorrect: false,
-                    onChanged: formNotifier.updatePassword,
-                    obscureText: formState.isPasswordHidden,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.lock),
-                      labelText: "Enter your password",
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.all(15),
-                      errorText: formState.passwordError,
-                      suffixIcon: IconButton(
-                        onPressed: formNotifier.togglePasswordVisibility,
-                        icon: Icon(
-                          formState.isPasswordHidden
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                  const SizedBox(height: 30),
+                  const Text(
+                    "Xush kelibsiz!",
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Text(
+                    "Yana uchrashganimizdan xursandmiz",
+                    style: TextStyle(fontSize: 18, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 50),
+
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        // EMAIL
+                        _buildField(
+                          icon: Icons.email,
+                          label: "Email",
+                          onChanged: formNotifier.updateEmail,
+                          error: formState.emailError,
+                          keyboardType: TextInputType.emailAddress,
                         ),
-                      ),
+                        const SizedBox(height: 20),
+
+                        // PAROL — TO‘G‘RI USUL!
+                        _buildField(
+                          icon: Icons.lock,
+                          label: "Parol",
+                          onChanged: formNotifier.updatePassword,
+                          error: formState.passwordError,
+                          obscure: formState.isPasswordHidden,
+                          // TO‘G‘RI
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              formState.isPasswordHidden
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                              color: Colors.white70,
+                            ),
+                            onPressed: formNotifier.togglePasswordVisibility,
+                          ),
+                        ),
+                        const SizedBox(height: 30),
+
+                        formState.isLoading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : SizedBox(
+                                width: double.infinity,
+                                height: 60,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: const Color(0xFFff6b6b),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    elevation: 10,
+                                  ),
+                                  onPressed: formState.isFormValid
+                                      ? login
+                                      : null,
+                                  child: const Text(
+                                    "KIRISH",
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  formState.isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : MyButton(
-                    onTap: formState.isFormValid ? login : null,
-                    buttonText: "Login",
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: const [
-                      Expanded(child: Divider(color: Colors.black26)),
-                      Text(" or "),
-                      Expanded(child: Divider(color: Colors.black26)),
-                    ],
-                  ),
-                  const SizedBox(height: 15),
-                  // Google login placeholder
-                  const SizedBox(height: 15),
+
+                  const SizedBox(height: 40),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("Don't have an account? "),
+                      const Text(
+                        "Hisobingiz yo‘qmi? ",
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
                       GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SignupScreen(),
-                            ),
-                          );
-                        },
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SignupScreen(),
+                          ),
+                        ),
                         child: const Text(
-                          "Sign Up",
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                          "Ro‘yxatdan o‘tish",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
                       ),
                     ],
@@ -138,8 +191,42 @@ class UserLoginScreen extends ConsumerWidget {
                 ],
               ),
             ),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+
+  // TO‘G‘RI _buildField — NOMLI PARAMETRLAR!
+  Widget _buildField({
+    required IconData icon,
+    required String label,
+    required Function(String) onChanged,
+    String? error,
+    TextInputType? keyboardType,
+    bool obscure = false,
+    Widget? suffixIcon,
+  }) {
+    return TextField(
+      keyboardType: keyboardType,
+      obscureText: obscure,
+      onChanged: onChanged,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        prefixIcon: Icon(icon, color: Colors.white70),
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70),
+        errorText: error,
+        errorStyle: const TextStyle(color: Colors.yellow),
+        enabledBorder: OutlineInputBorder(
+          borderSide: const BorderSide(color: Colors.white38),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: const BorderSide(color: Colors.white),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        suffixIcon: suffixIcon,
       ),
     );
   }

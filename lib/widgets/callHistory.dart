@@ -36,8 +36,11 @@ class Callhistory extends StatelessWidget {
                   ? Text(
                 widget.othersUser.name.isNotEmpty
                     ? widget.othersUser.name[0].toUpperCase()
-                    : "U",
+                    : "U",style: TextStyle(color: Colors.white),
               )
+                  : null,
+              backgroundColor: widget.othersUser.photoUrl == null
+                  ? const Color(0xFF6a11cb)
                   : null,
             ),
             const SizedBox(width: 8),

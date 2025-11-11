@@ -25,8 +25,12 @@ class Userlisttitle extends ConsumerWidget {
             ? NetworkImage(user.photoUrl!)
             : null,
         child: user.photoUrl == null
-            ? Text(user.name.isNotEmpty ? user.name[0].toLowerCase() : 'U')
+            ? Text(
+                user.name.isNotEmpty ? user.name[0].toLowerCase() : 'U',
+                style: TextStyle(color: Colors.white),
+              )
             : null,
+        backgroundColor: user.photoUrl == null ? const Color(0xFF6a11cb) : null,
       ),
       title: Text(user.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Consumer(
@@ -121,9 +125,9 @@ class Userlisttitle extends ConsumerWidget {
           child: buttonName(Icons.done, 'Accepted'),
         );
       }
-    }else{
+    } else {
       return MaterialButton(
-        color: Colors.blueAccent,
+        color: Color(0xFF6a11cb),
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         onPressed: () async {
@@ -147,8 +151,7 @@ class Userlisttitle extends ConsumerWidget {
         child: buttonName(Icons.person, 'Add friend'),
       );
     }
-    }
-
+  }
 
   SizedBox buttonName(IconData icon, String name) {
     return SizedBox(

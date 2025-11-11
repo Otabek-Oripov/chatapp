@@ -292,69 +292,92 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final chatService = ref.read(chatServiceProvider);
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: UserChatProfile(user: widget.othersUser, chatId: widget.chatId),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          actionButton(
-            false,
-            widget.othersUser.uid,
-            widget.othersUser.name,
-            ref,
-            widget.chatId,
-          ),
-          actionButton(
-            true,
-            widget.othersUser.uid,
-            widget.othersUser.name,
-            ref,
-            widget.chatId,
-          ),
-          PopupMenuButton(
-            onSelected: (value) async {
-              if (value == 'unfriend') {
-                final result = await showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text("Unfriend User"),
-                    content: Text(
-                      'Are you sure you want to unfriend ${widget.othersUser.name}?',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Unfriend'),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (result == true) {
-                  final unfriendResult = await chatService.unfriendUser(
-                    widget.chatId,
-                    widget.othersUser.uid,
-                  );
-                  if (unfriendResult == 'success' && context.mounted) {
-                    Navigator.pop(context);
-                    showAppSnackbar(
-                      context: context,
-                      type: SnackbarType.success,
-                      description: 'Your friendship disconnected',
-                    );
-                  }
-                }
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'unfriend', child: Text('Unfriend')),
+      // ChatScreen ichidagi appBar — TO‘G‘RI USUL!
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(70),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              bottomLeft: Radius.circular(30),
+              bottomRight: Radius.circular(30),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 10,
+                offset: Offset(0, 5),
+              ),
             ],
           ),
-         ],
+          child: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            centerTitle: false,
+            title: UserChatProfile(
+              user: widget.othersUser,
+              chatId: widget.chatId,
+            ),
+            actions: [
+              actionButton(
+                false,
+                widget.othersUser.uid,
+                widget.othersUser.name,
+                ref,
+                widget.chatId,
+              ),
+              actionButton(
+                true,
+                widget.othersUser.uid,
+                widget.othersUser.name,
+                ref,
+                widget.chatId,
+              ),
+              PopupMenuButton(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                icon: const Icon(Icons.more_vert, color: Colors.black87),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'unfriend',
+                    child: Text("Do‘stlikni bekor qilish"),
+                  ),
+                ],
+                onSelected: (v) async {
+                  if (v == 'unfriend') {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text("Do‘stlikni bekor qilish"),
+                        content: Text(
+                          "${widget.othersUser.name} bilan do‘stlikni bekor qilmoqchimisiz?",
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text("Yo‘q"),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text("Ha"),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await ref
+                          .read(chatServiceProvider)
+                          .unfriendUser(widget.chatId, widget.othersUser.uid);
+                      if (mounted) Navigator.pop(context);
+                    }
+                  }
+                },
+              ),
+              const SizedBox(width: 10),
+            ],
+          ),
+        ),
       ),
       body: Column(
         children: [
@@ -371,10 +394,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   return const Center(child: Text("No messages yet."));
                 }
 
-                final outgoingColor = const Color(0xFF007AFF);
+                final outgoingColor = Color(0xFF6a11cb);
                 final outgoingTextColor = Colors.white;
                 final incomingColor = const Color(0xFFF1F0F0);
                 final incomingTextColor = Colors.black87;
+
 
                 return ListView.builder(
                   controller: _scrollController,
@@ -396,7 +420,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           : incomingTextColor;
                       final accentColor = isMe
                           ? Colors.white
-                          : Colors.blueAccent;
+                          : Color(0xFF6a11cb);
 
                       return CustomAudioBubble(
                         key: ValueKey(message.messageId),
@@ -480,11 +504,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             child: Row(
               children: [
                 IconButton(
-                    onPressed: isUploading ? null : _showImageOptions,
+                  onPressed: isUploading ? null : _showImageOptions,
                   icon: Icon(
                     Icons.image,
                     size: 30,
-                    color: isUploading ? Colors.grey : Colors.blue,
+                    color: isUploading ? Colors.grey : Color(0xFF6a11cb),
                   ),
                 ),
                 Expanded(
@@ -546,7 +570,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                         radius: 25,
                         backgroundColor: _isRecording
                             ? Colors.redAccent
-                            : Colors.blueAccent,
+                            : Color(0xFF6a11cb),
                         child: isUploading
                             ? const SizedBox(
                                 width: 20,
@@ -574,10 +598,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ),
         ],
       ),
-
     );
-
   }
+
   void _showImageOptions() {
     showModalBottomSheet(
       context: context,

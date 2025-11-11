@@ -36,8 +36,13 @@ class MessageandimagesDisplay extends StatelessWidget {
                 widget.othersUser.name.isNotEmpty
                     ? widget.othersUser.name[0].toUpperCase()
                     : "U",
+                style: TextStyle(color: Colors.white),
               )
                   : null,
+              backgroundColor: widget.othersUser.photoUrl == null
+                  ? const Color(0xFF6a11cb)
+                  : null,
+
             ),
             const SizedBox(width: 8),
           ],
@@ -47,7 +52,7 @@ class MessageandimagesDisplay extends StatelessWidget {
                   ? const EdgeInsets.all(4) // Rasmlar uchun kichik padding
                   : const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: isMe ? Colors.blue : Colors.grey[300],
+                color: isMe ? Color(0xFF6a11cb) : Colors.grey[300],
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(

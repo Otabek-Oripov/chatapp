@@ -37,8 +37,11 @@ class UserChatProfile extends ConsumerWidget {
                       : null,
                   child: user.photoUrl == null
                       ? Text(
-                          user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                          user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',style: TextStyle(color: Colors.white),
                         )
+                      : null,
+                  backgroundColor: user.photoUrl == null
+                      ? const Color(0xFF6a11cb)
                       : null,
                 ),
               ),

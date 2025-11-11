@@ -13,17 +13,15 @@ class Userlistscreen extends ConsumerStatefulWidget {
 }
 
 class _UserlistscreenState extends ConsumerState<Userlistscreen> {
-
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
     OnlineStatusService();
-    WidgetsBinding.instance.addPostFrameCallback((_){
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.invalidate(usersProvider);
     });
   }
-
 
   Future<void> onRefresh() async {
     ref.invalidate(usersProvider);
@@ -36,91 +34,87 @@ class _UserlistscreenState extends ConsumerState<Userlistscreen> {
     ref.watch(authStateProvider);
     final users = ref.watch(filteresUsersProvider);
     final searchQuery = ref.watch(searchQueryProvider);
+    // lib/screens/userListscreen.dart
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text("All Users"),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          "Foydalanuvchilar",
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(56),
+          preferredSize: const Size.fromHeight(70),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-            child: TextField(
-              onChanged: (value) =>
-                  ref.read(searchQueryProvider.notifier).state = value,
-              decoration: InputDecoration(
-                hintText: 'Search user by name or email...',
-                prefixIcon: Icon(Icons.search),
-                suffixIcon: searchQuery.isNotEmpty
-                    ? IconButton(
-                        onPressed: () =>
-                            ref.read(searchQueryProvider.notifier).state = '',
-                        icon: Icon(Icons.clear),
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(25)),
-                ),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+              ),
+              child: TextField(
+                onChanged: (v) =>
+                    ref.read(searchQueryProvider.notifier).state = v,
+                decoration: InputDecoration(
+                  hintText: "Qidiruv...",
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  suffixIcon: searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () =>
+                              ref.read(searchQueryProvider.notifier).state = '',
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
                 ),
               ),
             ),
           ),
         ),
-        centerTitle: true,
       ),
-      body: RefreshIndicator(
-        onRefresh: onRefresh,
-        backgroundColor: Colors.white,
-        child: users.when(
-          data: (userList) {
-            if (userList.isEmpty && searchQuery.isNotEmpty) {
-              return ListView(
-                children: [
-                  SizedBox(height: 200),
-                  Center(child: Text('No users found matching your search')),
-                ],
-              );
-            }
-            if (userList.isEmpty) {
-              return ListView(
-                children: [
-                  SizedBox(height: 200),
-                  Center(child: Text("No other users found")),
-                ],
-              );
-            }
-            return ListView.builder(
-              physics: AlwaysScrollableScrollPhysics(),
-              itemCount: userList.length,
-              itemBuilder: (context, index) {
-                final user = userList[index];
-                return Userlisttitle(user: user);
-              },
-            );
-          },
-          error: (error, _) => ListView(
-            children: [
-              SizedBox(height: 20),
-              Center(
-                child: Column(
-                  children: [
-                    Text('Error $error'),
-                    SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => ref.invalidate(usersProvider),
-                      child: Text('Retry'),
-                    ),
-                  ],
+      body: users.when(
+        data: (list) => list.isEmpty
+            ? Center(
+                child: Text(
+                  searchQuery.isNotEmpty
+                      ? "Hech kim topilmadi"
+                      : "Boshqa foydalanuvchilar yo‘q",
+                  style: const TextStyle(fontSize: 18),
                 ),
+              )
+            : ListView.builder(
+                itemCount: list.length,
+                padding: const EdgeInsets.all(12),
+                itemBuilder: (_, i) {
+                  final user = list[i];
+                  return Container(
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                    child: Userlisttitle(user: user),
+                  );
+                },
               ),
-            ],
-          ),
-          loading: () => Center(child: CircularProgressIndicator()),
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: Color(0xFF6a11cb)),
         ),
-        // onRefresh: onRefresh,
+        error: (_, __) => const Center(child: Text("Xatolik")),
       ),
     );
   }
