@@ -1,4 +1,4 @@
-// main.dart (to‘liq almashtiring!)
+// main.dart
 import 'dart:async';
 
 import 'package:bugsnag_flutter/bugsnag_flutter.dart';
@@ -6,11 +6,15 @@ import 'package:chatapp/screens/HomeScreen.dart';
 import 'package:chatapp/screens/Sign.Up_screen.dart';
 import 'package:chatapp/secret/secret.dart';
 import 'package:chatapp/services/chatService.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:permission_handler/permission_handler.dart';
+
 import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
 
@@ -27,13 +31,12 @@ void main() async {
 
       await _requestPermissions();
 
-      await _initZego(); // ESKI PROJECT BILAN INIT
-
-      OnlineStatusService.initialize();
+      // faqat navigatorKey ni o‘rnatamiz
+      ZegoUIKitPrebuiltCallInvitationService().setNavigatorKey(navigatorKey);
 
       runApp(
-        ProviderScope(
-          child: MyApp(navigatorKey: navigatorKey),
+        const ProviderScope(
+          child: MyRootApp(),
         ),
       );
     },
@@ -43,32 +46,23 @@ void main() async {
   );
 }
 
-// PERMISSIONS
+// -------- PERMISSIONS --------
 Future<void> _requestPermissions() async {
-  final statuses = await [Permission.camera, Permission.microphone, Permission.notification].request();
-  final denied = statuses.entries.where((e) => !e.value.isGranted).map((e) => e.key).toList();
-  if (denied.isNotEmpty) print("Ruxsat berilmadi: $denied");
+  final statuses = await [
+    Permission.camera,
+    Permission.microphone,
+    Permission.notification,
+  ].request();
+
+  final denied =
+  statuses.entries.where((e) => !e.value.isGranted).map((e) => e.key).toList();
+
+  if (denied.isNotEmpty) {
+    print("Ruxsat berilmadi: $denied");
+  }
 }
 
-// ZEGO INIT — ESKI PROJECT BILAN (CHAT UCHUN)
-Future<void> _initZego() async {
-  final user = FirebaseAuth.instance.currentUser;
-  final userId = user?.uid ?? "guest_${DateTime.now().millisecondsSinceEpoch}";
-  final userName = user?.displayName ?? "Guest";
-
-  ZegoUIKitPrebuiltCallInvitationService().setNavigatorKey(navigatorKey);
-
-  await ZegoUIKitPrebuiltCallInvitationService().init(
-    appID: ZegoConfig.appId, // ESKI 1757546724
-    appSign: ZegoConfig.appSign,
-    userID: userId,
-    userName: userName,
-    plugins: [ZegoUIKitSignalingPlugin()],
-  );
-  print('Zego chat uchun init bo‘ldi: $userId');
-}
-
-// ONLINE STATUS (oldingidek)
+// -------- ONLINE STATUS SERVICE --------
 class OnlineStatusService {
   static final _chatService = ChatService();
   static final _observer = _AppLifecycleObserver();
@@ -101,30 +95,73 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed) {
       await OnlineStatusService._setOnline(true);
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached || state == AppLifecycleState.inactive) {
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.inactive) {
       await OnlineStatusService._setOnline(false);
     }
   }
 }
 
-// MY APP (oldingidek)
-class MyApp extends StatefulWidget {
-  final GlobalKey<NavigatorState> navigatorKey;
-  const MyApp({super.key, required this.navigatorKey});
+// -------- ROOT APP --------
+/// Bu widget Firebase auth o‘zgarishlarini tinglaydi va
+/// har safar user login / logout bo‘lganda Zego’ni to‘g‘ri init/uninit qiladi.
+class MyRootApp extends StatefulWidget {
+  const MyRootApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  State<MyRootApp> createState() => _MyRootAppState();
 }
 
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+class _MyRootAppState extends State<MyRootApp> with WidgetsBindingObserver {
+  StreamSubscription<User?>? _authSub;
+
   @override
   void initState() {
     super.initState();
-    OnlineStatusService.initialize();
+    WidgetsBinding.instance.addObserver(this);
+    _listenAuthChanges();
+  }
+
+  void _listenAuthChanges() {
+    _authSub = FirebaseAuth.instance.authStateChanges().listen(
+          (user) async {
+        if (user != null) {
+          // 🔥 USER LOGIN QILGANIDA ZEGO INIT
+          try {
+            await ZegoUIKitPrebuiltCallInvitationService().init(
+              appID: ZegoConfig.appId,      // yangi/hozirgi project AppID
+              appSign: ZegoConfig.appSign,  // yangi/hozirgi AppSign
+              userID: user.uid,             // Zego userID = Firebase UID
+              userName: user.displayName ??
+                  (user.email ?? 'user_${user.uid.substring(0, 6)}'),
+              plugins: [ZegoUIKitSignalingPlugin()],
+            );
+            print('Zego init bo‘ldi userID=${user.uid}');
+          } catch (e, s) {
+            print('Zego init error: $e');
+            bugsnag.notify(e, s);
+          }
+
+          // online statusni ham faqat logged-in user uchun
+          OnlineStatusService.initialize();
+        } else {
+          // USER LOGOUT – Zego’ni tozalaymiz
+          try {
+            await ZegoUIKitPrebuiltCallInvitationService().uninit();
+            print('Zego uninit bo‘ldi (user null)');
+          } catch (_) {}
+
+          OnlineStatusService.dispose();
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _authSub?.cancel();
     OnlineStatusService.dispose();
     super.dispose();
   }
@@ -132,15 +169,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: widget.navigatorKey,
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: FirebaseAuth.instance.currentUser == null
-          ? const SignupScreen()
-          : const Homescreen(),
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          final user = snapshot.data;
+          if (user == null) {
+            return const SignupScreen();
+          } else {
+            return const Homescreen();
+          }
+        },
+      ),
     );
   }
 }

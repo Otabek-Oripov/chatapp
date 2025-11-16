@@ -1,11 +1,20 @@
-// lib/screens/video_chat_screen.dart — TO‘LIQ ALMASHTIRING!
+// lib/screens/video_chat_screen.dart
+
 import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:zego_uikit/zego_uikit.dart';
 import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 
+/// Random videochat uchun Zego konfiguratsiyasi
+const int zegoRandomAppID = 1991101055;
+const String zegoRandomAppSign =
+    '2a591fef78ce6204faa1b11019ddb6908ad38305cf5fbc23229cdd9b67ccb602';
+
+/// Omegle uslubidagi random videochat ekrani
 class VideoChatScreen extends StatefulWidget {
   const VideoChatScreen({super.key});
 
@@ -13,196 +22,395 @@ class VideoChatScreen extends StatefulWidget {
   State<VideoChatScreen> createState() => _VideoChatScreenState();
 }
 
-class _VideoChatScreenState extends State<VideoChatScreen> {
+class _VideoChatScreenState extends State<VideoChatScreen>
+    with WidgetsBindingObserver {
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
-  late String userID;
-  late String userName;
 
-  bool isSearching = false;
-  bool isConnected = false;
-  String? callID;
-  String? partnerID;
+  late final String userID;
+  late final String userName;
 
-  StreamSubscription? _waitingSub;
+  bool _isSearching = false;
+  bool _isInCall = false;
+  String? _activeCallID;
+  String? _currentPartnerName;
+
+  StreamSubscription<QuerySnapshot>? _matchSubscription;
 
   @override
   void initState() {
     super.initState();
-    final user = _auth.currentUser!;
-    userID = user.uid;
-    userName = user.displayName?.isNotEmpty == true
-        ? user.displayName!
-        : "User_${userID.substring(0, 5)}";
+    WidgetsBinding.instance.addObserver(this);
+
+    final user = _auth.currentUser;
+    if (user == null) {
+      // Teorik jihatdan bu ekranga guest kirishi kerak emas,
+      // lekin crash bo‘lmasligi uchun fallback
+      userID = 'guest_${DateTime.now().millisecondsSinceEpoch}';
+      userName = 'Guest';
+    } else {
+      userID = user.uid;
+      userName = (user.displayName != null && user.displayName!.isNotEmpty)
+          ? user.displayName!
+          : (user.email ?? 'User_${user.uid.substring(0, 6)}');
+    }
   }
 
   @override
   void dispose() {
-    _leaveQueue();
+    WidgetsBinding.instance.removeObserver(this);
+    _cleanupMatching();
     super.dispose();
   }
 
-  Future<void> _startSearch() async {
-    if (isSearching || isConnected) return;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _cleanupMatching();
+    }
+  }
+
+  /// Kamera va mikrofonga ruxsat so‘rash
+  Future<bool> _requestPermissions() async {
+    final cameraStatus = await Permission.camera.request();
+    final micStatus = await Permission.microphone.request();
+    return cameraStatus.isGranted && micStatus.isGranted;
+  }
+
+  /// Random matchni tozalash (queue dan chiqish, call ni tugatish)
+  Future<void> _cleanupMatching() async {
+    _matchSubscription?.cancel();
+    _matchSubscription = null;
+
+    try {
+      // waiting navbatdan o‘chirish
+      await _firestore
+          .collection('random_waiting')
+          .doc(userID)
+          .delete()
+          .catchError((_) {});
+    } catch (e) {
+      debugPrint('random_waiting delete error: $e');
+    }
+
+    if (_activeCallID != null) {
+      try {
+        await _firestore.collection('random_calls').doc(_activeCallID).update({
+          'status': 'ended',
+          'endedAt': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+      } catch (e) {
+        debugPrint('random_calls update error: $e');
+      }
+    }
+
+    // Zego roomdan ham chiqamiz
+    try {
+      await ZegoUIKit().leaveRoom();
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _isSearching = false;
+        _isInCall = false;
+        _activeCallID = null;
+        _currentPartnerName = null;
+      });
+    }
+  }
+
+  /// START tugmasi bosilganda: random juftlik qidirishni boshlash
+  Future<void> _startMatching() async {
+    if (_isSearching || _isInCall) return;
+
+    if (!await _requestPermissions()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kamera va mikrofon ruxsatlari kerak.'),
+        ),
+      );
+      return;
+    }
+
     setState(() {
-      isSearching = true;
-      isConnected = false;
+      _isSearching = true;
     });
 
-    final docRef = _firestore.collection('waiting').doc(userID);
-    await docRef.set({
+    // Navbatga yozamiz
+    final waitingRef =
+    _firestore.collection('random_waiting').doc(userID);
+
+    await waitingRef.set({
       'uid': userID,
       'name': userName,
-      'timestamp': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
     });
 
-    _waitingSub = _firestore
-        .collection('waiting')
-        .where(FieldPath.documentId, isNotEqualTo: userID)
-        .limit(1)
-        .snapshots()
-        .listen((snapshot) async {
-          if (snapshot.docs.isEmpty || isConnected) return;
+    // Avval boshqa navbatdagilarni ko‘rib chiqamiz
+    final waitingSnapshot = await _firestore
+        .collection('random_waiting')
+        .orderBy('createdAt', descending: false)
+        .limit(10)
+        .get();
 
-          final partnerDoc = snapshot.docs.first;
-          partnerID = partnerDoc.id;
-          final partnerName = partnerDoc['name'] ?? "User";
+    QueryDocumentSnapshot<Map<String, dynamic>>? partnerDoc;
 
-          final ids = [userID, partnerID!]..sort();
-          callID = ids.join('_');
+    for (final doc in waitingSnapshot.docs) {
+      if (doc.id != userID) {
+        partnerDoc = doc;
+        break;
+      }
+    }
 
-          // CALL YARATISH
-          await _firestore.collection('calls').doc(callID).set({
+    if (partnerDoc != null) {
+      final partnerID = partnerDoc.id;
+      final partnerName =
+      (partnerDoc.data()['name'] ?? 'User') as String;
+
+      final ids = [userID, partnerID]..sort();
+      final callID = '${ids[0]}_${ids[1]}';
+
+      try {
+        await _firestore.runTransaction((transaction) async {
+          final myRef =
+          _firestore.collection('random_waiting').doc(userID);
+          final partnerRef =
+          _firestore.collection('random_waiting').doc(partnerID);
+
+          final mySnap = await transaction.get(myRef);
+          final partnerSnap = await transaction.get(partnerRef);
+
+          if (!mySnap.exists || !partnerSnap.exists) {
+            // Kimdir allaqachon olib ketgan bo‘lishi mumkin
+            return;
+          }
+
+          final callRef =
+          _firestore.collection('random_calls').doc(callID);
+
+          transaction.set(callRef, {
             'callID': callID,
             'user1': userID,
             'user2': partnerID,
             'user1_name': userName,
             'user2_name': partnerName,
-            'active': true,
-            'startedAt': FieldValue.serverTimestamp(),
+            'participants': [userID, partnerID],
+            'status': 'active',
+            'createdAt': FieldValue.serverTimestamp(),
           });
 
-          // TOZALASH
-          await Future.wait([
-            docRef.delete(),
-            _firestore.collection('waiting').doc(partnerID).delete(),
-          ]);
-
-          setState(() => isConnected = true);
-
-          if (mounted) {
-            Navigator.push(
-              context,
-              PageRouteBuilder(
-                pageBuilder: (_, __, ___) => CallScreen(
-                  callID: callID!,
-                  userID: userID,
-                  userName: userName,
-                  partnerName: partnerName,
-                  onNext: _nextUser,
-                  onStop: _stopAndBack,
-                ),
-                transitionsBuilder: (_, a, __, c) =>
-                    FadeTransition(opacity: a, child: c),
-                transitionDuration: const Duration(milliseconds: 300),
-              ),
-            );
-          }
+          // Endi navbatdan chiqarib tashlaymiz
+          transaction.delete(myRef);
+          transaction.delete(partnerRef);
         });
-  }
 
-  Future<void> _leaveQueue() async {
-    // Waiting dan chiqish
-    await _firestore.collection('waiting').doc(userID).delete();
+        // Transaction OK → juftlik topildi
+        if (!mounted) return;
 
-    // Agar call mavjud bo‘lsa — butunlay o‘chirish!
-    if (callID != null) {
-      await _firestore.collection('calls').doc(callID).delete();
+        _activeCallID = callID;
+        _currentPartnerName = partnerName;
+
+        setState(() {
+          _isSearching = false;
+          _isInCall = true;
+        });
+
+        _openCallScreen(
+          callID: callID,
+          partnerName: partnerName,
+        );
+        return;
+      } catch (e) {
+        debugPrint('Random match transaction error: $e');
+        // Urinish muvaffaqiyatsiz → kutish rejimi
+      }
     }
 
-    _waitingSub?.cancel();
-    callID = null;
-    partnerID = null;
+    // Hali juftlik topilmadi → boshqa user seni topishi uchun listener qo‘yamiz
+    _matchSubscription?.cancel();
+    _matchSubscription = _firestore
+        .collection('random_calls')
+        .where('participants', arrayContains: userID)
+        .where('status', isEqualTo: 'active')
+        .snapshots()
+        .listen((snapshot) {
+      if (!_isInCall && snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        final callID = doc['callID'] as String;
+        final partnerID =
+        (doc['user1'] as String) == userID ? doc['user2'] as String : doc['user1'] as String;
+        final partnerName =
+        (doc['user1'] as String) == userID ? doc['user2_name'] as String : doc['user1_name'] as String;
 
-    if (mounted) {
-      setState(() {
-        isSearching = false;
-        isConnected = false;
-      });
-    }
+        _matchSubscription?.cancel();
+        _matchSubscription = null;
+
+        if (!mounted) return;
+
+        _activeCallID = callID;
+        _currentPartnerName = partnerName;
+
+        setState(() {
+          _isSearching = false;
+          _isInCall = true;
+        });
+
+        _openCallScreen(
+          callID: callID,
+          partnerName: partnerName,
+        );
+      }
+    });
   }
 
-  void _nextUser() async {
-    await _leaveQueue();
-    _startSearch();
+  /// CallScreen ga o‘tish
+  void _openCallScreen({
+    required String callID,
+    required String partnerName,
+  }) {
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (_) => CallScreen(
+          callID: callID,
+          userID: userID,
+          userName: userName,
+          partnerName: partnerName,
+          onNext: _onNextFromCall,
+          onStop: _onStopFromCall,
+        ),
+      ),
+    )
+        .then((_) {
+      if (mounted) {
+        setState(() {
+          _isInCall = false;
+        });
+      }
+    });
   }
 
-  void _stopAndBack() async {
-    await _leaveQueue();
+  /// Call tugaganda – “Stop” varianti (suhbat tugadi va qaytish)
+  Future<void> _onStopFromCall() async {
+    await _cleanupMatching();
+  }
+
+  /// Call tugaganda – “Next” varianti (yangi random qidirish)
+  Future<void> _onNextFromCall() async {
+    await _cleanupMatching();
     if (mounted) {
-      Navigator.popUntil(context, (route) => route.isFirst);
+      _startMatching();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isWaiting = _isSearching && !_isInCall;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          if (!isSearching && !isConnected)
-            Center(
-              child: ElevatedButton(
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text(
+          'Random Videochat',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.videocam_rounded,
+              size: 80,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              isWaiting
+                  ? 'Juftlik qidirilmoqda...'
+                  : 'Tasodifiy suhbatdosh bilan videochat qiling',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 40),
+            if (isWaiting)
+              Column(
+                children: [
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.stop),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                    onPressed: () async {
+                      await _cleanupMatching();
+                    },
+                    label: const Text(
+                      'Bekor qilish',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const SizedBox(
+                    height: 40,
+                    width: 40,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 4,
+                    ),
+                  ),
+                ],
+              )
+            else
+              ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
+                  backgroundColor: Colors.greenAccent.shade400,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 60,
-                    vertical: 15,
+                    vertical: 16,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(40),
                   ),
                 ),
-                onPressed: _startSearch,
+                onPressed: _startMatching,
                 child: const Text(
-                  "START",
+                  'START',
                   style: TextStyle(
-                    fontSize: 25,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: Colors.black,
                   ),
                 ),
               ),
-            ),
-
-          if (isSearching && !isConnected)
-            const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 6,
-                  ),
-                  SizedBox(height: 30),
-                  Text(
-                    "Juftlik qidirilmoqda...",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-// CALL SCREEN — STATEFUL + ISMI CHIROYLI + STOP TO‘G‘RI ISHLAYDI
+/// Bitta random call uchun Zego ekrani
 class CallScreen extends StatefulWidget {
   final String callID;
   final String userID;
@@ -226,7 +434,15 @@ class CallScreen extends StatefulWidget {
 }
 
 class _CallScreenState extends State<CallScreen> {
-  bool isMicOn = true;
+  bool _isMicOn = true;
+  bool _isCameraOn = true;
+
+  /// call tugaganda nima qilish kerakligini bilish uchun flag
+  bool _isEnding = false;
+  bool _nextAfterHangup = false;
+
+  final ZegoUIKitPrebuiltCallController _callController =
+  ZegoUIKitPrebuiltCallController();
 
   @override
   Widget build(BuildContext context) {
@@ -234,10 +450,10 @@ class _CallScreenState extends State<CallScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
+          // Asosiy Zego call widget
           ZegoUIKitPrebuiltCall(
-            appID: 448607128,
-            appSign:
-                "0078f2d636d85815818a894d1a17c6400ac54cd597daaa77835c7f20e72da0ac",
+            appID: zegoRandomAppID,
+            appSign: zegoRandomAppSign,
             userID: widget.userID,
             userName: widget.userName,
             callID: widget.callID,
@@ -245,16 +461,52 @@ class _CallScreenState extends State<CallScreen> {
               ..turnOnCameraWhenJoining = true
               ..turnOnMicrophoneWhenJoining = true
               ..useSpeakerWhenJoining = true
-              ..topMenuBarConfig = ZegoTopMenuBarConfig(isVisible: false)
-              ..bottomMenuBarConfig = ZegoBottomMenuBarConfig(isVisible: false),
+              ..topMenuBarConfig.isVisible = false
+              ..bottomMenuBarConfig.isVisible = false,
+            events: ZegoUIKitPrebuiltCallEvents(
+              onError: (error) {
+                debugPrint('Zego error: $error');
+              },
+              onCallEnd:
+                  (ZegoCallEndEvent event, VoidCallback defaultAction) {
+                if (_isEnding) {
+                  defaultAction.call();
+                  return;
+                }
+                _isEnding = true;
+
+                // remote chiqib ketsa yoki vaqt tugasa
+                if (event.reason == ZegoCallEndReason.remoteHangUp ||
+                    event.reason == ZegoCallEndReason.abandoned ||
+                    event.reason == ZegoCallEndReason.kickOut) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Suhbatdosh chiqib ketdi'),
+                    ),
+                  );
+                  widget.onStop();
+                } else {
+                  // localHangUp
+                  if (_nextAfterHangup) {
+                    widget.onNext();
+                  } else {
+                    widget.onStop();
+                  }
+                }
+
+                // Zego defaultAction → oldingi sahifaga qaytish
+                defaultAction.call();
+              },
+            ),
           ),
 
-          // PARTNER ISMI
+          // Partner ismi – yuqori chapda
           Positioned(
             top: 60,
             left: 20,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.black54,
                 borderRadius: BorderRadius.circular(20),
@@ -270,9 +522,9 @@ class _CallScreenState extends State<CallScreen> {
             ),
           ),
 
-          // BUTTONLAR — ROWDA, 70x70
+          // Tugmalar – mic, camera, next, stop
           Positioned(
-            bottom: 180,
+            bottom: 160,
             left: 20,
             right: 20,
             child: Row(
@@ -281,88 +533,109 @@ class _CallScreenState extends State<CallScreen> {
                 // MIKROFON
                 GestureDetector(
                   onTap: () {
-                    setState(() => isMicOn = !isMicOn);
-                    ZegoUIKit().turnMicrophoneOn(isMicOn);
+                    setState(() {
+                      _isMicOn = !_isMicOn;
+                    });
+                    ZegoUIKit()
+                        .turnMicrophoneOn(_isMicOn, userID: widget.userID);
                   },
-                  child: Container(
-                    height: 70,
-                    width: 70,
-                    decoration: BoxDecoration(
-                      color: isMicOn
-                          ? Colors.green.shade600
-                          : Colors.red.shade700,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: isMicOn
-                              ? Colors.green.withOpacity(0.6)
-                              : Colors.red.withOpacity(0.6),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      isMicOn ? Icons.mic : Icons.mic_off,
-                      color: Colors.white,
-                      size: 36,
-                    ),
+                  child: _roundButton(
+                    isActive: _isMicOn,
+                    activeColor: Colors.green.shade600,
+                    inactiveColor: Colors.red.shade700,
+                    icon: _isMicOn ? Icons.mic : Icons.mic_off,
+                  ),
+                ),
+
+                // KAMERA
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isCameraOn = !_isCameraOn;
+                    });
+                    ZegoUIKit()
+                        .turnCameraOn(_isCameraOn, userID: widget.userID);
+                  },
+                  child: _roundButton(
+                    isActive: _isCameraOn,
+                    activeColor: Colors.green.shade600,
+                    inactiveColor: Colors.red.shade700,
+                    icon: _isCameraOn
+                        ? Icons.videocam
+                        : Icons.videocam_off,
                   ),
                 ),
 
                 // NEXT
                 GestureDetector(
-                  onTap: widget.onNext,
-                  child: Container(
-                    height: 70,
-                    width: 70,
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade700,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.orange.withOpacity(0.6),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.skip_next,
-                      color: Colors.white,
-                      size: 40,
-                    ),
+                  onTap: () {
+                    if (_isEnding) return;
+                    _nextAfterHangup = true;
+                    _callController.hangUp(
+                      context,
+                      showConfirmation: false,
+                      reason: ZegoCallEndReason.localHangUp,
+                    );
+                  },
+                  child: _roundButton(
+                    isActive: true,
+                    activeColor: Colors.orange.shade700,
+                    inactiveColor: Colors.orange.shade700,
+                    icon: Icons.skip_next,
                   ),
                 ),
 
                 // STOP
                 GestureDetector(
-                  onTap: widget.onStop,
-                  child: Container(
-                    height: 70,
-                    width: 70,
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade600,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.red.withOpacity(0.6),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.stop,
-                      color: Colors.white,
-                      size: 40,
-                    ),
+                  onTap: () {
+                    if (_isEnding) return;
+                    _nextAfterHangup = false;
+                    _callController.hangUp(
+                      context,
+                      showConfirmation: false,
+                      reason: ZegoCallEndReason.localHangUp,
+                    );
+                  },
+                  child: _roundButton(
+                    isActive: true,
+                    activeColor: Colors.red.shade600,
+                    inactiveColor: Colors.red.shade600,
+                    icon: Icons.stop,
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _roundButton({
+    required bool isActive,
+    required Color activeColor,
+    required Color inactiveColor,
+    required IconData icon,
+  }) {
+    final color = isActive ? activeColor : inactiveColor;
+    return Container(
+      height: 70,
+      width: 70,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.6),
+            blurRadius: 20,
+            spreadRadius: 5,
+          ),
+        ],
+      ),
+      child: Icon(
+        icon,
+        color: Colors.white,
+        size: 36,
       ),
     );
   }

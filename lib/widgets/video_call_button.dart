@@ -13,31 +13,34 @@ ZegoSendCallInvitationButton actionButton(
     ) {
   return ZegoSendCallInvitationButton(
     isVideoCall: isVideo,
-    resourceID: 'zego_call', // o'z ZEGOCLOUD resource ID'ingni yoz
+    resourceID: 'zego_call', // must match resourceID in Zego console if using push
     iconSize: const Size(30, 30),
     buttonSize: const Size(40, 40),
 
     invitees: [
       ZegoUIKitUser(
-        id: receiverId,
+        id: receiverId,      // 🔥 this must equal callee's userID used in init
         name: receiverName,
       ),
     ],
 
-    // chaqirilganda ishlaydigan event
     onPressed: (String code, String message, List<String> errorInvitees) async {
+      debugPrint(
+          'SendCallInvitationButton onPressed -> code=$code, message=$message, errorInvitees=$errorInvitees');
+
       final chatService = ref.read(chatServiceProvider);
 
-      if (errorInvitees.isNotEmpty) {
+      if (errorInvitees.isNotEmpty || code != '0') {
+        // code '0' usually means success
         debugPrint('Error inviting users: $errorInvitees');
+        // you could also show a snackbar here if you want
       } else {
         debugPrint('Call invitation sent successfully');
 
-        // Firestore tarixga yozish
         await chatService.addCallHistory(
           chatId: chatId,
           isVideoCall: isVideo,
-          callStatus: 'pending', // boshlanishida “pending” yoki “ringing”
+          callStatus: 'pending', // or "ringing"
         );
       }
     },
