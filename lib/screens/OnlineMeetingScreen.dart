@@ -56,7 +56,7 @@ class _VideoChatScreenState extends State<VideoChatScreen>
           : (user.email ?? 'User_${user.uid.substring(0, 6)}');
     }
 
-    // Ixtiyoriy: ekran ochilganda eski random holatlarni tozalab qo‘yish
+    // Ekranga kirganda eski random holatlarni tozalab ketamiz
     _cleanupMatching();
   }
 
@@ -69,8 +69,8 @@ class _VideoChatScreenState extends State<VideoChatScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Agar qidiruvda bo‘lsa ham, callda bo‘lsa ham – ilova background’ga ketganda
-    // tozalab qo‘yamiz, shunda hech qachon xonada "yolg‘iz" qolib ketmaysan.
+    // Qidiruvda bo‘lsa ham, callda bo‘lsa ham – ilova background’ga ketganda
+    // tozalab qo‘yamiz (yolg‘iz roomda qolmaslik uchun).
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _cleanupMatching();
@@ -107,7 +107,7 @@ class _VideoChatScreenState extends State<VideoChatScreen>
     }
 
     try {
-      // Shu user ishtirok etayotgan barcha active call’larni tugatish
+      // Shu user ishtirok etayotgan barcha ACTIVE call’larni STOP sifatida tugatish
       final activeCallsSnap = await _firestore
           .collection('random_calls')
           .where('participants', arrayContains: userID)
@@ -118,8 +118,9 @@ class _VideoChatScreenState extends State<VideoChatScreen>
         await doc.reference.set(
           {
             'status': 'ended',
+            'endAction': 'stop',
+            'endedBy': userID,
             'endedAt': FieldValue.serverTimestamp(),
-            // Agar token bilan match bo‘lgan bo‘lsa, baribir tugatiladi
           },
           SetOptions(merge: true),
         );
@@ -139,7 +140,6 @@ class _VideoChatScreenState extends State<VideoChatScreen>
         _isInCall = false;
         _activeCallID = null;
         _currentPartnerName = null;
-        // Avvalgi tokenni hech qayerda ishlatmaymiz
       });
     }
 
@@ -285,8 +285,6 @@ class _VideoChatScreenState extends State<VideoChatScreen>
         final doc = snapshot.docs.first;
         final data = doc.data();
         final callID = data['callID'] as String;
-        final partnerID =
-        (data['user1'] as String) == userID ? data['user2'] as String : data['user1'] as String;
         final partnerName =
         (data['user1'] as String) == userID ? data['user2_name'] as String : data['user1_name'] as String;
 
@@ -497,15 +495,58 @@ class _CallScreenState extends State<CallScreen>
   final ZegoUIKitPrebuiltCallController _callController =
   ZegoUIKitPrebuiltCallController();
 
+  StreamSubscription<DocumentSnapshot>? _callDocSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Firestore dan call statusni kuzatamiz (remote STOP/NEXT bo‘lsa ham)
+    _callDocSub = _firestore
+        .collection('random_calls')
+        .doc(widget.callID)
+        .snapshots()
+        .listen((snapshot) async {
+      if (!snapshot.exists) return;
+      final data = snapshot.data() as Map<String, dynamic>;
+      final status = data['status'] as String? ?? 'active';
+      if (status != 'ended' || _handledCallEnd) return;
+
+      final endedBy = data['endedBy'] as String?;
+      final action = (data['endAction'] as String?) ?? 'stop';
+
+      // Agar o‘zi tugatgan bo‘lsa – onCallEnd allaqachon ishlagan bo‘ladi
+      if (endedBy == widget.userID) {
+        return;
+      }
+
+      // Bu yerga faqat remote tugatgan holatda kelamiz
+      _handledCallEnd = true;
+
+      final isNext = action == 'next';
+
+      // Zego roomdan chiqishga harakat qilamiz
+      try {
+        await ZegoUIKit().leaveRoom();
+      } catch (_) {}
+
+      if (isNext) {
+        widget.onNext();
+      } else {
+        widget.onStop();
+      }
+
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _callDocSub?.cancel();
     super.dispose();
   }
 
@@ -565,7 +606,7 @@ class _CallScreenState extends State<CallScreen>
         widget.onStop();
       }
     } else {
-      // remote tugatdi → Firestore’dan endAction ni o‘qiymiz
+      // remote tugatgan bo‘lishi mumkin (lekin baribir Firestore listener ham ishlaydi)
       String? action;
       try {
         final doc = await _firestore
@@ -576,10 +617,8 @@ class _CallScreenState extends State<CallScreen>
       } catch (_) {}
 
       if (action == 'next') {
-        // 🔥 Partner Next bosgan → biz ham avtomatik Next
         widget.onNext();
       } else {
-        // Partner Stop qilgan yoki status yo‘q → biz Stop varianti
         widget.onStop();
       }
     }
