@@ -35,6 +35,9 @@ class _VideoChatScreenState extends State<VideoChatScreen>
   String? _activeCallID;
   String? _currentPartnerName;
 
+  /// Har bir qidiruv sessiyasi uchun unikal token
+  String? _searchToken;
+
   StreamSubscription<QuerySnapshot>? _matchSubscription;
 
   @override
@@ -44,8 +47,6 @@ class _VideoChatScreenState extends State<VideoChatScreen>
 
     final user = _auth.currentUser;
     if (user == null) {
-      // Teorik jihatdan bu ekranga guest kirishi kerak emas,
-      // lekin crash bo‘lmasligi uchun fallback
       userID = 'guest_${DateTime.now().millisecondsSinceEpoch}';
       userName = 'Guest';
     } else {
@@ -54,6 +55,9 @@ class _VideoChatScreenState extends State<VideoChatScreen>
           ? user.displayName!
           : (user.email ?? 'User_${user.uid.substring(0, 6)}');
     }
+
+    // Ixtiyoriy: ekran ochilganda eski random holatlarni tozalab qo‘yish
+    _cleanupMatching();
   }
 
   @override
@@ -65,6 +69,8 @@ class _VideoChatScreenState extends State<VideoChatScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Agar qidiruvda bo‘lsa ham, callda bo‘lsa ham – ilova background’ga ketganda
+    // tozalab qo‘yamiz, shunda hech qachon xonada "yolg‘iz" qolib ketmaysan.
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _cleanupMatching();
@@ -78,10 +84,16 @@ class _VideoChatScreenState extends State<VideoChatScreen>
     return cameraStatus.isGranted && micStatus.isGranted;
   }
 
-  /// Random matchni tozalash (queue dan chiqish, call ni tugatish)
+  /// Random bilan bog‘liq hamma narsani tozalash:
+  /// - waiting dan chiqarish
+  /// - bu user qatnashgan barcha active random_calls ni "ended" qilish
+  /// - Zego roomdan chiqish
   Future<void> _cleanupMatching() async {
     _matchSubscription?.cancel();
     _matchSubscription = null;
+
+    final currentToken = _searchToken;
+    _searchToken = null;
 
     try {
       // waiting navbatdan o‘chirish
@@ -94,15 +106,26 @@ class _VideoChatScreenState extends State<VideoChatScreen>
       debugPrint('random_waiting delete error: $e');
     }
 
-    if (_activeCallID != null) {
-      try {
-        await _firestore.collection('random_calls').doc(_activeCallID).update({
-          'status': 'ended',
-          'endedAt': FieldValue.serverTimestamp(),
-        }).catchError((_) {});
-      } catch (e) {
-        debugPrint('random_calls update error: $e');
+    try {
+      // Shu user ishtirok etayotgan barcha active call’larni tugatish
+      final activeCallsSnap = await _firestore
+          .collection('random_calls')
+          .where('participants', arrayContains: userID)
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      for (final doc in activeCallsSnap.docs) {
+        await doc.reference.set(
+          {
+            'status': 'ended',
+            'endedAt': FieldValue.serverTimestamp(),
+            // Agar token bilan match bo‘lgan bo‘lsa, baribir tugatiladi
+          },
+          SetOptions(merge: true),
+        );
       }
+    } catch (e) {
+      debugPrint('random_calls cleanup error: $e');
     }
 
     // Zego roomdan ham chiqamiz
@@ -116,8 +139,11 @@ class _VideoChatScreenState extends State<VideoChatScreen>
         _isInCall = false;
         _activeCallID = null;
         _currentPartnerName = null;
+        // Avvalgi tokenni hech qayerda ishlatmaymiz
       });
     }
+
+    debugPrint('Random cleanup done for user=$userID, oldToken=$currentToken');
   }
 
   /// START tugmasi bosilganda: random juftlik qidirishni boshlash
@@ -134,17 +160,21 @@ class _VideoChatScreenState extends State<VideoChatScreen>
       return;
     }
 
+    // Har bir qidiruv sessiyasi uchun yangi token
+    _searchToken = '${userID}_${DateTime.now().microsecondsSinceEpoch}';
+    debugPrint('Random search started with token: $_searchToken');
+
     setState(() {
       _isSearching = true;
     });
 
     // Navbatga yozamiz
-    final waitingRef =
-    _firestore.collection('random_waiting').doc(userID);
+    final waitingRef = _firestore.collection('random_waiting').doc(userID);
 
     await waitingRef.set({
       'uid': userID,
       'name': userName,
+      'token': _searchToken,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -164,10 +194,12 @@ class _VideoChatScreenState extends State<VideoChatScreen>
       }
     }
 
-    if (partnerDoc != null) {
+    // Agar navbatda boshqa user topilsa, transaction qilib call yaratamiz
+    if (partnerDoc != null && _searchToken != null) {
       final partnerID = partnerDoc.id;
-      final partnerName =
-      (partnerDoc.data()['name'] ?? 'User') as String;
+      final partnerData = partnerDoc.data();
+      final partnerName = (partnerData['name'] ?? 'User') as String;
+      final partnerToken = (partnerData['token'] ?? '') as String;
 
       final ids = [userID, partnerID]..sort();
       final callID = '${ids[0]}_${ids[1]}';
@@ -197,8 +229,12 @@ class _VideoChatScreenState extends State<VideoChatScreen>
             'user1_name': userName,
             'user2_name': partnerName,
             'participants': [userID, partnerID],
+            'tokens': [_searchToken, partnerToken],
             'status': 'active',
             'createdAt': FieldValue.serverTimestamp(),
+            'endAction': null,
+            'endedBy': null,
+            'endedAt': null,
           });
 
           // Endi navbatdan chiqarib tashlaymiz
@@ -207,7 +243,7 @@ class _VideoChatScreenState extends State<VideoChatScreen>
         });
 
         // Transaction OK → juftlik topildi
-        if (!mounted) return;
+        if (!mounted || !_isSearching || _searchToken == null) return;
 
         _activeCallID = callID;
         _currentPartnerName = partnerName;
@@ -230,24 +266,34 @@ class _VideoChatScreenState extends State<VideoChatScreen>
 
     // Hali juftlik topilmadi → boshqa user seni topishi uchun listener qo‘yamiz
     _matchSubscription?.cancel();
+
+    if (_searchToken == null) return;
+    final localToken = _searchToken; // closure uchun
+
     _matchSubscription = _firestore
         .collection('random_calls')
-        .where('participants', arrayContains: userID)
+        .where('tokens', arrayContains: localToken)
         .where('status', isEqualTo: 'active')
         .snapshots()
         .listen((snapshot) {
+      // Agar bu orada cancel bo‘lib ketgan bo‘lsa – eventni ignor qilamiz
+      if (!_isSearching || _searchToken == null || _searchToken != localToken) {
+        return;
+      }
+
       if (!_isInCall && snapshot.docs.isNotEmpty) {
         final doc = snapshot.docs.first;
-        final callID = doc['callID'] as String;
+        final data = doc.data();
+        final callID = data['callID'] as String;
         final partnerID =
-        (doc['user1'] as String) == userID ? doc['user2'] as String : doc['user1'] as String;
+        (data['user1'] as String) == userID ? data['user2'] as String : data['user1'] as String;
         final partnerName =
-        (doc['user1'] as String) == userID ? doc['user2_name'] as String : doc['user1_name'] as String;
+        (data['user1'] as String) == userID ? data['user2_name'] as String : data['user1_name'] as String;
 
         _matchSubscription?.cancel();
         _matchSubscription = null;
 
-        if (!mounted) return;
+        if (!mounted || !_isSearching) return;
 
         _activeCallID = callID;
         _currentPartnerName = partnerName;
@@ -297,7 +343,7 @@ class _VideoChatScreenState extends State<VideoChatScreen>
     await _cleanupMatching();
   }
 
-  /// Call tugaganda – “Next” varianti (yangi random qidirish)
+  /// Call tugaganda – “Next” varianti (ikkala user ham qayta random qidirish)
   Future<void> _onNextFromCall() async {
     await _cleanupMatching();
     if (mounted) {
@@ -360,6 +406,7 @@ class _VideoChatScreenState extends State<VideoChatScreen>
                       ),
                     ),
                     onPressed: () async {
+                      // 🔥 Bekor qilish → random dagi hamma narsa tozalanadi
                       await _cleanupMatching();
                     },
                     label: const Text(
@@ -433,16 +480,110 @@ class CallScreen extends StatefulWidget {
   State<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends State<CallScreen> {
+class _CallScreenState extends State<CallScreen>
+    with WidgetsBindingObserver {
+  final _firestore = FirebaseFirestore.instance;
+
   bool _isMicOn = true;
   bool _isCameraOn = true;
 
-  /// call tugaganda nima qilish kerakligini bilish uchun flag
-  bool _isEnding = false;
+  /// Qaysi tugma bosilganini bilish uchun flag:
+  /// next -> true, stop / system -> false
   bool _nextAfterHangup = false;
+
+  /// onCallEnd faqat bir marta ishlashi uchun
+  bool _handledCallEnd = false;
 
   final ZegoUIKitPrebuiltCallController _callController =
   ZegoUIKitPrebuiltCallController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// App backgroundga ketganda – callni STOP sifatida tugatamiz
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      if (!_handledCallEnd) {
+        _nextAfterHangup = false; // stop
+        _callController.hangUp(
+          context,
+          showConfirmation: false,
+          reason: ZegoCallEndReason.localHangUp,
+        );
+      }
+    }
+  }
+
+  Future<void> _markCallEnded(String action) async {
+    try {
+      await _firestore.collection('random_calls').doc(widget.callID).set(
+        {
+          'status': 'ended',
+          'endAction': action, // 'next' yoki 'stop'
+          'endedBy': widget.userID,
+          'endedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    } catch (e) {
+      debugPrint('markCallEnded error: $e');
+    }
+  }
+
+  void _onCallEnd(ZegoCallEndEvent event, VoidCallback defaultAction) {
+    if (_handledCallEnd) {
+      defaultAction.call();
+      return;
+    }
+    _handledCallEnd = true;
+
+    _handleCallEndAsync(event).whenComplete(() {
+      defaultAction.call(); // Zego default Pop
+    });
+  }
+
+  Future<void> _handleCallEndAsync(ZegoCallEndEvent event) async {
+    // local user tugatdi
+    if (event.reason == ZegoCallEndReason.localHangUp) {
+      final action = _nextAfterHangup ? 'next' : 'stop';
+      await _markCallEnded(action);
+
+      if (_nextAfterHangup) {
+        widget.onNext();
+      } else {
+        widget.onStop();
+      }
+    } else {
+      // remote tugatdi → Firestore’dan endAction ni o‘qiymiz
+      String? action;
+      try {
+        final doc = await _firestore
+            .collection('random_calls')
+            .doc(widget.callID)
+            .get();
+        action = doc.data()?['endAction'] as String?;
+      } catch (_) {}
+
+      if (action == 'next') {
+        // 🔥 Partner Next bosgan → biz ham avtomatik Next
+        widget.onNext();
+      } else {
+        // Partner Stop qilgan yoki status yo‘q → biz Stop varianti
+        widget.onStop();
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -467,36 +608,7 @@ class _CallScreenState extends State<CallScreen> {
               onError: (error) {
                 debugPrint('Zego error: $error');
               },
-              onCallEnd:
-                  (ZegoCallEndEvent event, VoidCallback defaultAction) {
-                if (_isEnding) {
-                  defaultAction.call();
-                  return;
-                }
-                _isEnding = true;
-
-                // remote chiqib ketsa yoki vaqt tugasa
-                if (event.reason == ZegoCallEndReason.remoteHangUp ||
-                    event.reason == ZegoCallEndReason.abandoned ||
-                    event.reason == ZegoCallEndReason.kickOut) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Suhbatdosh chiqib ketdi'),
-                    ),
-                  );
-                  widget.onStop();
-                } else {
-                  // localHangUp
-                  if (_nextAfterHangup) {
-                    widget.onNext();
-                  } else {
-                    widget.onStop();
-                  }
-                }
-
-                // Zego defaultAction → oldingi sahifaga qaytish
-                defaultAction.call();
-              },
+              onCallEnd: _onCallEnd,
             ),
           ),
 
@@ -560,16 +672,15 @@ class _CallScreenState extends State<CallScreen> {
                     isActive: _isCameraOn,
                     activeColor: Colors.green.shade600,
                     inactiveColor: Colors.red.shade700,
-                    icon: _isCameraOn
-                        ? Icons.videocam
-                        : Icons.videocam_off,
+                    icon:
+                    _isCameraOn ? Icons.videocam : Icons.videocam_off,
                   ),
                 ),
 
-                // NEXT
+                // NEXT (ikkala tomonni qayta qidirishga qaytaradi)
                 GestureDetector(
                   onTap: () {
-                    if (_isEnding) return;
+                    if (_handledCallEnd) return;
                     _nextAfterHangup = true;
                     _callController.hangUp(
                       context,
@@ -585,10 +696,10 @@ class _CallScreenState extends State<CallScreen> {
                   ),
                 ),
 
-                // STOP
+                // STOP (ikkala tomon uchun ham to‘xtatadi)
                 GestureDetector(
                   onTap: () {
-                    if (_isEnding) return;
+                    if (_handledCallEnd) return;
                     _nextAfterHangup = false;
                     _callController.hangUp(
                       context,
