@@ -1,7 +1,5 @@
 // lib/screens/video_chat_screen.dart
-
 import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -301,7 +299,7 @@ class _VideoChatScreenState extends State<VideoChatScreen>
         setState(() {
           _isSearching = false;
           _isInCall = true;
-        });
+        }); 
 
         _openCallScreen(
           callID: callID,
